@@ -1,0 +1,22 @@
+# Reference scripts (kept locally, not redistributed — see README "Provenance")
+_reference/
+
+# Data & training artifacts
+cubicasa_data/
+outputs/
+*.zip
+wandb/
+
+# Orchestration runtime state
+logs/
+state/
+
+# Secrets
+.env
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+.ipynb_checkpoints/
+.DS_Store

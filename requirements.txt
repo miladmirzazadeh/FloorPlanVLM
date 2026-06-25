@@ -1,0 +1,20 @@
+# Core training stack for FloorPlanVLM (Qwen2.5-VL + TRL LoRA SFT/GRPO).
+# Lower bounds are what the recipe needs; if a future release breaks the API,
+# pin to the "known-good" set noted in docs/RUNPOD.md.
+torch>=2.2.0
+torchvision
+transformers>=4.49.0
+trl>=0.15.0
+peft>=0.13.0
+datasets>=2.18.0
+accelerate>=0.30.0
+huggingface_hub>=0.24.0
+shapely>=2.0.0
+Pillow>=10.0.0
+lxml
+numpy
+tqdm
+qwen-vl-utils
+python-dotenv
+# flash-attn is optional and installed separately in runpod_bootstrap.sh
+# (it compiles slowly and is not required for correctness).
