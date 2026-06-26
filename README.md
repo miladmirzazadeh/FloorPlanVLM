@@ -80,10 +80,23 @@ python -m src.infer path/to/floorplan.png                      # uses your GRPO 
 python -m src.infer path/to/floorplan.png <HF_USER>/floorplan-vlm-sft   # SFT only
 ```
 
+## Evaluation
+
+Score an adapter on the held-out split with the paper's metrics (validity, external-wall
+IoU, room IoU/F1, room-label F1, opening F1, wall-count MAE):
+
+```bash
+python -m src.eval --adapter <HF_USER>/floorplan-vlm-grpo --limit 100
+DATASETS=synth python -m src.eval        # measure one dataset's contribution
+```
+
+Same held-out split as training (seed 42), so deltas across datasets/stages are
+comparable — see [docs/RUNPOD.md §13](docs/RUNPOD.md). Metric math: [`src/metrics.py`](src/metrics.py).
+
 ## Layout
 
 ```
-src/   config.py · prompts.py · taxonomy.py · geometry.py · data.py · data_msd.py · data_struct3d.py · data_synth.py · rewards.py · hub_utils.py · train_sft.py · train_grpo.py · infer.py
+src/   config.py · prompts.py · taxonomy.py · geometry.py · data.py · data_msd.py · data_struct3d.py · data_synth.py · rewards.py · metrics.py · hub_utils.py · train_sft.py · train_grpo.py · infer.py · eval.py
 scripts/  runpod_bootstrap.sh · run_pipeline.sh · status.sh · stop.sh
 docs/   RUNPOD.md   (pod setup, cost, multi-dataset, curved walls, scaling to Qwen-30B, troubleshooting)
 ```

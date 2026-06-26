@@ -222,3 +222,20 @@ same-point pairs (the generator's exact transform), maps wall centerlines + room
 + openings to pixels, normalizes to longest-edge 1024, resizes the rendered PNG to match
 (pixel-aligned). Curved walls come straight from the `arc` field → exact `curvature`.
 Room types map to the unified taxonomy; openings → `center+width` on the nearest wall.
+
+## 13. Evaluating (measuring what each dataset/stage adds)
+After training, score the adapter on the held-out split with the paper's metrics:
+```bash
+python -m src.eval                                  # GRPO adapter, 100 held-out samples
+python -m src.eval --adapter <user>/floorplan-vlm-sft --limit 200   # SFT only
+python -m src.eval --adapter base                   # untrained baseline, for reference
+DATASETS=synth python -m src.eval                   # eval on ONE dataset's holdout
+```
+It reports **validity rate, external-wall IoU, room IoU/F1, room-label F1, opening F1,
+and wall-count MAE**, and writes `eval_results.json`. The split is the same one training
+held out (`get_sft_datasets`, seed 42), so it's genuinely unseen.
+
+How to read it: train with `DATASETS=cubicasa`, eval; then `DATASETS=cubicasa,synth`,
+retrain, eval — the IoU/F1 deltas tell you what each dataset actually buys. Run after SFT
+and again after GRPO to see the RL gain (the paper's big jump is in validity + ext-IoU).
+Metric definitions live in `src/metrics.py`.
