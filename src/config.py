@@ -57,9 +57,10 @@ REPO_SFT = _derive_repo("sft")    # checkpoints + final SFT adapter live here
 REPO_GRPO = _derive_repo("grpo")  # checkpoints + final GRPO adapter live here
 
 # ── Datasets ──────────────────────────────────────────────────────────────────
-# Comma-separated, mixed after harmonization. "cubicasa" only by default so the
-# baseline is untouched; add MSD with e.g. DATASETS="cubicasa,msd".
-DATASETS = [d.strip() for d in _s("DATASETS", "cubicasa").split(",") if d.strip()]
+# Comma-separated, mixed after harmonization. Default = ALL sources; each that
+# isn't present on the box is auto-skipped (cubicasa + struct3d auto-download;
+# msd + synth need their data dirs). Set DATASETS="cubicasa" for a quick baseline.
+DATASETS = [d.strip() for d in _s("DATASETS", "cubicasa,struct3d,msd,synth").split(",") if d.strip()]
 
 # synth-floorseg's room topology is procedurally generated, so it's kept OUT of the
 # GRPO/Stage-2 reward (which scores room topology via R_int). By default GRPO uses

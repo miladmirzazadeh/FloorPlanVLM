@@ -105,23 +105,26 @@ Curved walls are supported end-to-end via a signed-sagitta `curvature` field —
 IoU reward and all renderers are arc-aware ([`src/geometry.py`](src/geometry.py)); set
 `FIT_CURVES=1` to have parsers fit arcs to curved geometry ([docs/RUNPOD.md §11](docs/RUNPOD.md)).
 
-## More data (optional): multi-dataset training
+## Datasets: all four are mixed by default (~22k samples)
 
-CubiCasa-only is the default. Mix in more data by setting `DATASETS` — sources are
-harmonized (coords → 1024, unified room labels in [`src/taxonomy.py`](src/taxonomy.py),
-openings → `center+width`) and shuffled together:
+`DATASETS` defaults to **all four** sources (each auto-skipped if its data isn't on the
+box). Set `DATASETS=cubicasa` for a quick ~5k baseline. Sources are harmonized (coords →
+1024, unified room labels in [`src/taxonomy.py`](src/taxonomy.py), openings →
+`center+width`) and shuffled together:
 
-| Dataset | `DATASETS` token | Get it | Why |
-|---|---|---|---|
-| CubiCasa5K | `cubicasa` | auto (Zenodo) | real, default baseline |
-| **Structured3D** | `struct3d` | **auto** (39 MB annotations only) | **synthetic → pixel-perfect**, clean room types, slanted walls (paper's HQ trick) |
-| MSD | `msd` | manual ([4TU](https://data.4tu.nl/datasets/e1d89cb5-6872-48fc-be63-aadd687ee6f9)) | real, complex multi-unit geometry |
-| **synth-floorseg** | `synth` | manual (Kaggle zip) | **richest**: synthetic CAD renders + explicit wall centerlines/thickness, **real curved-wall arcs**, room types |
+| Dataset | token | ~Samples | Get it | Role |
+|---|---|---:|---|---|
+| CubiCasa5K | `cubicasa` | ~5,000 | auto (Zenodo) | real baseline |
+| Structured3D | `struct3d` | 3,500 | **auto** (39 MB) | synthetic → pixel-perfect, clean types, slanted walls |
+| MSD | `msd` | ~4,200 | manual ([4TU](https://data.4tu.nl/datasets/e1d89cb5-6872-48fc-be63-aadd687ee6f9)) | real, complex multi-unit |
+| synth-floorseg | `synth` | 10,000 | manual (Kaggle zip) | **richest**: CAD renders + explicit walls/thickness, real curved arcs, types |
+| **Total** | | **~22,700** | | ~5× CubiCasa alone |
 
-E.g. `DATASETS=cubicasa,struct3d,synth`. Both the Structured3D and synth parsers are
-validated on real data (S3D 30/30 scenes; synth incl. curved walls — a κ=1.0 semicircle
-reconstructed exactly). Full steps, per-dataset caps for the mix ratio, and one-file
-verification commands are in [docs/RUNPOD.md §9–12](docs/RUNPOD.md).
+Both the Structured3D and synth parsers are validated on real data (S3D 30/30 scenes;
+synth incl. a κ=1.0 semicircle reconstructed exactly). **synth is excluded from GRPO by
+default** (`GRPO_DATASETS`) since its room topology is procedural — it trains Stage-1 SFT
+for geometry only. Full steps, per-dataset caps for the mix ratio, and one-file
+verification commands are in [docs/RUNPOD.md §9–13](docs/RUNPOD.md).
 
 ## Provenance & license
 
