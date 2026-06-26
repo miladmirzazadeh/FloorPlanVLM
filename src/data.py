@@ -24,6 +24,19 @@ from . import config
 from .prompts import SYSTEM_PROMPT, USER_PROMPT
 from .taxonomy import CUBICASA_ROOM_MAP as ROOM_MAP
 
+Image.MAX_IMAGE_PIXELS = None  # CubiCasa has some very large scans; don't error on them
+
+
+def _load_image_1024(path):
+    """Open + downscale to longest-edge 1024 (matches the normalized coords and keeps
+    the in-memory dataset small/fast — full-res images choke Dataset.from_list)."""
+    img = Image.open(path).convert("RGB")
+    sc = 1024.0 / max(img.size)
+    if sc < 1.0:
+        img = img.resize((max(1, round(img.width * sc)), max(1, round(img.height * sc))),
+                         Image.BILINEAR)
+    return img
+
 
 # ── Download & extract ────────────────────────────────────────────────────────
 
@@ -225,7 +238,7 @@ def _build(data_dir, max_samples, want_records):
             img_path = os.path.abspath(os.path.join(pdir, "F1_scaled.png"))
             annotations.append({"image_path": img_path, "json_annotation": js})
             if want_records:
-                img = Image.open(img_path).convert("RGB")
+                img = _load_image_1024(img_path)
                 records.append({
                     "messages": [
                         {"role": "system", "content": [{"type": "text", "text": SYSTEM_PROMPT}]},
