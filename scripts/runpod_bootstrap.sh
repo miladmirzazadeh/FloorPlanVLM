@@ -20,6 +20,10 @@ export HF_TOKEN HF_USER
 # Keep everything that grows on the LARGE volume, not the small container disk —
 # otherwise '/' hits its quota and writes fail with "Disk quota exceeded".
 export HF_HOME="${HF_HOME:-$ROOT/.hf_cache}"          # base model (~7GB) + tokens
+# The xet download backend ignores HF_HOME and fills the small container disk
+# ("Disk quota exceeded" during model download) — disable it + cache on volume.
+export HF_HUB_DISABLE_XET="${HF_HUB_DISABLE_XET:-1}"
+export HF_XET_CACHE="${HF_XET_CACHE:-$HF_HOME/xet}"
 export TMPDIR="${TMPDIR:-$ROOT/.tmp}"                 # temp files (unzip, downloads)
 export XDG_CACHE_HOME="${XDG_CACHE_HOME:-$ROOT/.cache}"   # triton/matplotlib/etc.
 export PIP_CACHE_DIR="${PIP_CACHE_DIR:-$ROOT/.pip}"
