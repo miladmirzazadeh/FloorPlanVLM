@@ -83,10 +83,19 @@ python -m src.infer path/to/floorplan.png <HF_USER>/floorplan-vlm-sft   # SFT on
 ## Layout
 
 ```
-src/   config.py · prompts.py · data.py · rewards.py · hub_utils.py · train_sft.py · train_grpo.py · infer.py
+src/   config.py · prompts.py · taxonomy.py · data.py · data_msd.py · rewards.py · hub_utils.py · train_sft.py · train_grpo.py · infer.py
 scripts/  runpod_bootstrap.sh · run_pipeline.sh · status.sh · stop.sh
-docs/   RUNPOD.md   (step-by-step pod setup, cost, scaling to Qwen-30B, troubleshooting)
+docs/   RUNPOD.md   (pod setup, cost, MSD multi-dataset, scaling to Qwen-30B, troubleshooting)
 ```
+
+## More data (optional): MSD multi-dataset
+
+CubiCasa-only is the default. To mix in **MSD (Modified Swiss Dwellings)** — 5.3K real,
+complex multi-unit European plans — download it once and set `DATASETS=cubicasa,msd`
++ `MSD_DIR=...`. Coordinates and room-label taxonomy are harmonized across datasets in
+[`src/taxonomy.py`](src/taxonomy.py); walls are rebuilt from MSD's segmentation masks
+(its graph omits them). Full steps + the one-file verification command are in
+[docs/RUNPOD.md §9](docs/RUNPOD.md).
 
 ## Provenance & license
 

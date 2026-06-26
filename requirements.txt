@@ -11,6 +11,7 @@ accelerate>=0.30.0
 huggingface_hub>=0.24.0
 shapely>=2.0.0
 Pillow>=10.0.0
+opencv-python-headless>=4.8.0   # MSD full_out mask -> contours/components
 lxml
 numpy
 tqdm

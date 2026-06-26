@@ -101,3 +101,46 @@ non-Manhattan geometry, and overfits faster on small data.
 - **Hub push is slow:** raise `SAVE_STEPS_SFT` / `SAVE_STEPS_GRPO` to checkpoint less often.
 - **GRPO can't find the SFT adapter:** make sure SFT finished (a `FINISHED` file exists in
   `<HF_USER>/floorplan-vlm-sft`); GRPO loads + merges that adapter before training.
+
+## 9. Adding MSD (Modified Swiss Dwellings) — multi-dataset training
+MSD adds 5.3K real, complex, multi-unit European layouts (thick exterior walls,
+irregular rooms, shared corridors). It's **opt-in**, so it never affects a
+CubiCasa-only run.
+
+**Get the data** (one-time): download the MSD training archive from
+[4TU.ResearchData](https://data.4tu.nl/datasets/e1d89cb5-6872-48fc-be63-aadd687ee6f9)
+(CC BY 4.0, ~4.7 GB) and extract it onto the volume so that `full_out/*.npy` exists:
+```bash
+# after downloading msd_train.zip to /workspace:
+mkdir -p /workspace/msd_data && unzip -q /workspace/msd_train.zip -d /workspace/msd_data
+```
+
+**Verify the conversion on ONE file first** (the parser infers class indices from
+MSD's `ROOM_NAMES` order — eyeball one sample before a full run):
+```bash
+MSD_DIR=/workspace/msd_data python -m src.data_msd /workspace/msd_data
+# prints walls/rooms/openings counts + saves *_debug.png (red = reconstructed walls).
+# If it says "no rooms detected", the class indices in src/taxonomy.py need adjusting
+# to match the unique values printed.
+```
+
+**Enable it** by setting two env vars, then launch as usual:
+```bash
+DATASETS=cubicasa,msd
+MSD_DIR=/workspace/msd_data
+# optional: MSD_MAX_SAMPLES=2000  to cap / tune the mix ratio vs CubiCasa
+```
+
+**How harmonization is handled** (the things that matter when mixing datasets):
+- *Coordinates*: every dataset is normalized to longest-edge = 1024, image resized to
+  match — so coords are pixel-aligned and on one grid across datasets.
+- *Taxonomy*: both datasets map onto the ~14 unified labels in `src/taxonomy.py`
+  (e.g. CubiCasa "Hall" and MSD "Corridor" → `corridor`).
+- *Openings*: reduced to the canonical `center + width` nested under the parent wall.
+
+**Representation caveat (important):** MSD's graph omits walls, so we rebuild the
+wall-centric schema from the `full_out` segmentation mask (rooms → polygon edges →
+deduped walls; wall *thickness* is estimated from the Structure mask, not exact).
+MSD mainly teaches **geometric complexity**; room *type* is intentionally not colour-
+leaked into the rendered input, so type labels from MSD are weaker supervision than
+its geometry. Mix it with CubiCasa rather than training on MSD alone.

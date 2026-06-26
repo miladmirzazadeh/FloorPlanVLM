@@ -56,12 +56,23 @@ def _derive_repo(stage):
 REPO_SFT = _derive_repo("sft")    # checkpoints + final SFT adapter live here
 REPO_GRPO = _derive_repo("grpo")  # checkpoints + final GRPO adapter live here
 
+# ── Datasets ──────────────────────────────────────────────────────────────────
+# Comma-separated, mixed after harmonization. "cubicasa" only by default so the
+# baseline is untouched; add MSD with e.g. DATASETS="cubicasa,msd".
+DATASETS = [d.strip() for d in _s("DATASETS", "cubicasa").split(",") if d.strip()]
+
 # ── Paths (persistent volume on RunPod is /workspace) ─────────────────────────
 DATA_DIR = _s("DATA_DIR", "./cubicasa_data")
-ANN_PATH = os.path.join(DATA_DIR, "annotations.json")
+ANN_PATH = os.path.join(DATA_DIR, "annotations.json")  # combined, all datasets
 ZENODO_URL = _s("ZENODO_URL", "https://zenodo.org/record/2613548/files/cubicasa5k.zip?download=1")
 OUTPUT_DIR_SFT = _s("OUTPUT_DIR_SFT", "./outputs/sft")
 OUTPUT_DIR_GRPO = _s("OUTPUT_DIR_GRPO", "./outputs/grpo")
+
+# MSD (Modified Swiss Dwellings) — download the train archive from 4TU and extract
+# so that <MSD_DIR>/.../full_out/*.npy exists (see docs/RUNPOD.md).
+MSD_DIR = _s("MSD_DIR", "./msd_data")
+MSD_RENDER_DIR = _s("MSD_RENDER_DIR", os.path.join(MSD_DIR, "rendered"))
+MSD_MAX_SAMPLES = _opt_i("MSD_MAX_SAMPLES", None)
 
 # ── Data shaping ──────────────────────────────────────────────────────────────
 MAX_JSON_CHARS = _i("MAX_JSON_CHARS", 10000)
@@ -102,6 +113,7 @@ SAVE_STEPS_GRPO = _i("SAVE_STEPS_GRPO", 100)
 SMOKE_TEST = _b("SMOKE_TEST", False)
 if SMOKE_TEST:
     MAX_SAMPLES = min(MAX_SAMPLES or 40, 40)
+    MSD_MAX_SAMPLES = min(MSD_MAX_SAMPLES or 40, 40)
     NUM_EPOCHS_SFT = 1
     SAVE_STEPS_SFT = 5
     GRPO_MAX_SAMPLES = min(GRPO_MAX_SAMPLES or 16, 16)

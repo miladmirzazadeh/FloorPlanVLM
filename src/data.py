@@ -21,7 +21,8 @@ from shapely.geometry import LineString, Polygon, Point
 from datasets import Dataset
 
 from . import config
-from .prompts import SYSTEM_PROMPT, USER_PROMPT, ROOM_MAP
+from .prompts import SYSTEM_PROMPT, USER_PROMPT
+from .taxonomy import CUBICASA_ROOM_MAP as ROOM_MAP
 
 
 # ── Download & extract ────────────────────────────────────────────────────────
@@ -250,20 +251,38 @@ def _write_annotations(annotations):
     print(f"[data] wrote {config.ANN_PATH} ({len(annotations)} entries)")
 
 
-def get_sft_datasets():
-    """Full SFT path: download, convert, persist annotations, split train/eval."""
-    try:
+def _load_one(name, want_records):
+    """Return (records, annotations) for a single dataset, already harmonized."""
+    name = name.lower()
+    if name == "cubicasa":
         data_dir = download_and_extract()
-        records, annotations = _build(data_dir, config.MAX_SAMPLES, want_records=True)
-        if len(records) < 5:
-            raise ValueError(f"only {len(records)} samples")
-        _write_annotations(annotations)
-    except Exception as e:
-        print(f"[data] real data unavailable ({e}); using synthetic fallback")
-        records = _synthetic(20)
-        _write_annotations([])  # GRPO will regenerate from real data when available
+        return _build(data_dir, config.MAX_SAMPLES, want_records=want_records)
+    if name == "msd":
+        from .data_msd import build_msd_records
+        return build_msd_records(config.MSD_DIR, config.MSD_MAX_SAMPLES, want_records=want_records)
+    raise ValueError(f"unknown dataset '{name}' (supported: cubicasa, msd)")
 
-    ds = Dataset.from_list(records)
+
+def get_sft_datasets():
+    """Build + harmonize + mix all configured datasets; persist annotations; split."""
+    all_records, all_anns = [], []
+    for name in config.DATASETS:
+        try:
+            recs, anns = _load_one(name, want_records=True)
+            print(f"[data] {name}: {len(anns)} samples")
+            all_records += recs
+            all_anns += anns
+        except Exception as e:
+            print(f"[data] dataset '{name}' failed: {e}")
+
+    if len(all_records) < 5:
+        print("[data] insufficient real data; using synthetic fallback")
+        all_records = _synthetic(20)
+        all_anns = []
+
+    _write_annotations(all_anns)
+    ds = Dataset.from_list(all_records).shuffle(seed=42)
+    print(f"[data] combined SFT dataset: {len(ds)} samples from {config.DATASETS}")
     if config.EVAL_RATIO > 0 and len(ds) >= 40:
         split = ds.train_test_split(test_size=config.EVAL_RATIO, seed=42)
         return split["train"], split["test"]
@@ -271,12 +290,17 @@ def get_sft_datasets():
 
 
 def ensure_annotations():
-    """GRPO path: make sure annotations.json exists (cheap rebuild after a fresh pod)."""
+    """GRPO path: rebuild combined annotations.json if missing (fresh pod)."""
     if os.path.exists(config.ANN_PATH):
         return
-    data_dir = download_and_extract()
-    _, annotations = _build(data_dir, config.MAX_SAMPLES, want_records=False)
-    _write_annotations(annotations)
+    all_anns = []
+    for name in config.DATASETS:
+        try:
+            _, anns = _load_one(name, want_records=False)
+            all_anns += anns
+        except Exception as e:
+            print(f"[data] dataset '{name}' failed: {e}")
+    _write_annotations(all_anns)
 
 
 def build_grpo_dataset(ann_path, max_samples):
