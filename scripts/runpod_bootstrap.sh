@@ -33,8 +33,14 @@ else
 fi
 
 # ── HF auth (non-interactive) ──
-huggingface-cli login --token "$HF_TOKEN" --add-to-git-credential >/dev/null 2>&1 \
-  && echo "[bootstrap] HF login ok" || echo "[bootstrap] HF login warning (continuing)"
+# `huggingface-cli` is deprecated -> prefer `hf auth login`, fall back to the old CLI.
+# Either way the Python pipeline also reads HF_TOKEN directly, so this is best-effort.
+if hf auth login --token "$HF_TOKEN" --add-to-git-credential >/dev/null 2>&1 \
+   || huggingface-cli login --token "$HF_TOKEN" --add-to-git-credential >/dev/null 2>&1; then
+  echo "[bootstrap] HF login ok"
+else
+  echo "[bootstrap] HF CLI login skipped (Python pipeline uses HF_TOKEN directly)"
+fi
 
 # ── launch the watchdog fully detached ──
 LOG="logs/pipeline_$(date +%Y%m%d_%H%M%S).log"
