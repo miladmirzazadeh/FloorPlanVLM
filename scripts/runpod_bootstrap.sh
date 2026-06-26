@@ -17,11 +17,15 @@ if [ -f .env ]; then set -a; . ./.env; set +a; fi
 : "${HF_USER:?Set HF_USER (your HuggingFace username) or add to .env}"
 export HF_TOKEN HF_USER
 
-# Keep the HF cache (7GB base model + tokens) on the LARGE volume, not the small
-# container disk — otherwise '/' fills up and writes fail with "Disk quota exceeded".
-export HF_HOME="${HF_HOME:-$ROOT/.hf_cache}"
-mkdir -p "$HF_HOME"
-echo "[bootstrap] HF_HOME=$HF_HOME"
+# Keep everything that grows on the LARGE volume, not the small container disk —
+# otherwise '/' hits its quota and writes fail with "Disk quota exceeded".
+export HF_HOME="${HF_HOME:-$ROOT/.hf_cache}"          # base model (~7GB) + tokens
+export TMPDIR="${TMPDIR:-$ROOT/.tmp}"                 # temp files (unzip, downloads)
+export XDG_CACHE_HOME="${XDG_CACHE_HOME:-$ROOT/.cache}"   # triton/matplotlib/etc.
+export PIP_CACHE_DIR="${PIP_CACHE_DIR:-$ROOT/.pip}"
+export TRITON_CACHE_DIR="${TRITON_CACHE_DIR:-$XDG_CACHE_HOME/triton}"
+mkdir -p "$HF_HOME" "$TMPDIR" "$XDG_CACHE_HOME" "$PIP_CACHE_DIR"
+echo "[bootstrap] caches on volume: HF_HOME=$HF_HOME TMPDIR=$TMPDIR"
 
 mkdir -p logs state outputs
 
