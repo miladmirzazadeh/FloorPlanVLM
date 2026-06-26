@@ -47,7 +47,9 @@ LOG="logs/pipeline_$(date +%Y%m%d_%H%M%S).log"
 ln -sf "$(basename "$LOG")" logs/latest.log
 echo "[bootstrap] launching pipeline -> $LOG"
 setsid nohup bash scripts/run_pipeline.sh > "$LOG" 2>&1 < /dev/null &
-echo $! > state/pipeline.pid
+sleep 1
+# record the real watchdog PID (setsid detaches, so $! can be wrong/empty)
+pgrep -f "scripts/run_pipeline.sh" | tail -1 > state/pipeline.pid 2>/dev/null || echo "$!" > state/pipeline.pid
 
 sleep 2
 echo

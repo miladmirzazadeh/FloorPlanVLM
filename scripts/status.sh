@@ -3,8 +3,12 @@
 cd "$(dirname "$0")/.."
 
 echo "== process =="
-if [ -f state/pipeline.pid ] && kill -0 "$(cat state/pipeline.pid)" 2>/dev/null; then
-  echo "running (PID $(cat state/pipeline.pid))"
+WPIDS=$(pgrep -f "scripts/run_pipeline.sh" | tr '\n' ' ')
+TPIDS=$(pgrep -f "src\.train_" | tr '\n' ' ')
+if [ -n "$WPIDS" ]; then
+  echo "running — watchdog PID(s): $WPIDS | trainer PID(s): ${TPIDS:-none (data prep or between retries)}"
+  WCOUNT=$(echo $WPIDS | wc -w)
+  [ "$WCOUNT" -gt 1 ] && echo "  ⚠ $WCOUNT watchdogs running — should be 1. Run: bash scripts/stop.sh"
 else
   echo "not running"
 fi
