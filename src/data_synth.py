@@ -175,8 +175,11 @@ def build_synth_records(synth_dir, max_samples=None, want_records=True):
         cfgs = {_pid(p): p for p in glob.glob(os.path.join(synth_dir, "**", "plan_*.json"), recursive=True)
                 if "rich" not in p}
     riches = {_pid(p): p for p in glob.glob(os.path.join(synth_dir, "**", "*_rich.json"), recursive=True)}
-    imgs = {_pid(p): p for p in glob.glob(os.path.join(synth_dir, "**", "*.png"), recursive=True)
-            if _pid(p)}
+    rd = os.path.abspath(config.SYNTH_RENDER_DIR)   # never read back our own rendered PNGs
+    imgs = {}
+    for p in glob.glob(os.path.join(synth_dir, "**", "*.png"), recursive=True):
+        if _pid(p) and not os.path.abspath(p).startswith(rd):
+            imgs[_pid(p)] = p
     ids = sorted(i for i in (set(cfgs) & set(riches) & set(imgs)) if i)
     print(f"[synth] {len(ids)} plans with config+rich+image under {synth_dir}")
     if max_samples:
@@ -222,8 +225,10 @@ def _debug(path):
     from PIL import ImageDraw
     cfgp = cfgs[0]
     pid = _pid(cfgp)
+    rd = os.path.abspath(config.SYNTH_RENDER_DIR)
     rich = next(p for p in glob.glob(os.path.join(path, "**", f"{pid}_rich.json"), recursive=True))
-    img = next(p for p in glob.glob(os.path.join(path, "**", f"{pid}.png"), recursive=True))
+    img = next(p for p in glob.glob(os.path.join(path, "**", f"{pid}.png"), recursive=True)
+               if not os.path.abspath(p).startswith(rd))
     res = convert(json.loads(open(cfgp).read()), json.loads(open(rich).read()), img)
     if res is None:
         print("conversion returned None")
