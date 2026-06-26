@@ -223,6 +223,12 @@ same-point pairs (the generator's exact transform), maps wall centerlines + room
 (pixel-aligned). Curved walls come straight from the `arc` field → exact `curvature`.
 Room types map to the unified taxonomy; openings → `center+width` on the nearest wall.
 
+**Topology / GRPO note:** synth's room topology is procedurally generated, so synth is
+**kept out of GRPO/Stage 2 by default** (it still trains in Stage 1 SFT for geometry).
+`GRPO_DATASETS` controls this — it defaults to all of `DATASETS` minus synth; set it
+explicitly (e.g. `GRPO_DATASETS=cubicasa,struct3d`) to override. So with
+`DATASETS=cubicasa,synth`, SFT learns from both but GRPO only uses CubiCasa.
+
 ## 13. Evaluating (measuring what each dataset/stage adds)
 After training, score the adapter on the held-out split with the paper's metrics:
 ```bash

@@ -275,6 +275,8 @@ def get_sft_datasets():
     for name in config.DATASETS:
         try:
             recs, anns = _load_one(name, want_records=True)
+            for a in anns:
+                a["source"] = name
             print(f"[data] {name}: {len(anns)} samples")
             all_records += recs
             all_anns += anns
@@ -303,6 +305,8 @@ def ensure_annotations():
     for name in config.DATASETS:
         try:
             _, anns = _load_one(name, want_records=False)
+            for a in anns:
+                a["source"] = name
             all_anns += anns
         except Exception as e:
             print(f"[data] dataset '{name}' failed: {e}")
@@ -317,6 +321,19 @@ def build_grpo_dataset(ann_path, max_samples):
     if not anns:
         print("[data] no real annotations; synthetic GRPO fallback")
         return _synthetic_grpo(max_samples or 16)
+    # Exclude datasets not in GRPO_DATASETS (synth's topology is kept out of Stage 2).
+    allow = set(config.GRPO_DATASETS)
+    if allow:
+        kept = [a for a in anns if a.get("source", "?") in allow]
+        if kept:
+            dropped = len(anns) - len(kept)
+            if dropped:
+                print(f"[data] GRPO uses {len(kept)} anns from {sorted(allow)} "
+                      f"(excluded {dropped}, incl. synth topology)")
+            anns = kept
+        else:
+            print(f"[data] WARNING: GRPO_DATASETS={sorted(allow)} matched no annotations; "
+                  f"using all {len(anns)} instead.")
     if max_samples:
         anns = anns[:max_samples]
     records = []

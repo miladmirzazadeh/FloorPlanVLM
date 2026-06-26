@@ -61,6 +61,15 @@ REPO_GRPO = _derive_repo("grpo")  # checkpoints + final GRPO adapter live here
 # baseline is untouched; add MSD with e.g. DATASETS="cubicasa,msd".
 DATASETS = [d.strip() for d in _s("DATASETS", "cubicasa").split(",") if d.strip()]
 
+# synth-floorseg's room topology is procedurally generated, so it's kept OUT of the
+# GRPO/Stage-2 reward (which scores room topology via R_int). By default GRPO uses
+# every dataset EXCEPT synth; synth still trains in Stage-1 SFT for geometry. Override
+# explicitly with GRPO_DATASETS="cubicasa,struct3d".
+SYNTH_ALIASES = {"synth", "synth-floorseg", "synthfloorseg"}
+_grpo_env = _s("GRPO_DATASETS", "")
+GRPO_DATASETS = ([d.strip() for d in _grpo_env.split(",") if d.strip()] if _grpo_env
+                 else [d for d in DATASETS if d.lower() not in SYNTH_ALIASES])
+
 # ── Paths (persistent volume on RunPod is /workspace) ─────────────────────────
 DATA_DIR = _s("DATA_DIR", "./cubicasa_data")
 ANN_PATH = os.path.join(DATA_DIR, "annotations.json")  # combined, all datasets
