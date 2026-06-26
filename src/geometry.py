@@ -10,9 +10,9 @@ height of the arc's apex above the chord. 0 = straight, +/-1 = semicircle; the
 sign is the bulge direction. It's scale-invariant (coords are already normalized
 to 1024), so the same number means the same shape at any size.
 
-We reconstruct the arc as a quadratic Bezier through start, apex, end — a robust,
-wraparound-free approximation of a circular arc that is plenty accurate for
-rendering, IoU, and the GRPO reward signal.
+We reconstruct a TRUE circular arc from (start, end, curvature): the sagitta ratio
+plus the two endpoints uniquely determine a circle, so the rendered/scored curve
+matches the real arc (a semicircle is a real semicircle, not a parabola).
 """
 import numpy as np
 from shapely.geometry import LineString
@@ -21,21 +21,36 @@ from shapely.ops import unary_union
 CURVE_EPS = 1e-3
 
 
+def _wrap(x):
+    """Wrap angle to (-pi, pi]."""
+    return (x + np.pi) % (2 * np.pi) - np.pi
+
+
 def arc_points(a, b, curvature, n=24):
-    """Polyline (list of (x,y)) from a to b bulging by `curvature`."""
+    """Polyline (list of (x,y)) tracing the circular arc from a to b with the given
+    signed sagitta-ratio `curvature`."""
     a = np.asarray(a, float)
     b = np.asarray(b, float)
     chord = b - a
     L = float(np.hypot(*chord))
     if L < 1e-6 or abs(curvature) < CURVE_EPS:
         return [(float(a[0]), float(a[1])), (float(b[0]), float(b[1]))]
-    h = curvature * L / 2.0                      # signed sagitta
+    h = curvature * L / 2.0                       # signed sagitta
     u = chord / L
-    nrm = np.array([-u[1], u[0]])                # unit perpendicular
+    nrm = np.array([-u[1], u[0]])                 # unit perpendicular
     M = (a + b) / 2.0
-    C = M + 2.0 * h * nrm                         # Bezier control -> passes through apex at t=0.5
-    ts = np.linspace(0.0, 1.0, n + 1)
-    pts = [(1 - t) ** 2 * a + 2 * t * (1 - t) * C + t ** 2 * b for t in ts]
+    R = (L * L / 4.0 + h * h) / (2.0 * abs(h))    # circumradius
+    c = -np.sign(h) * np.sqrt(max(R * R - L * L / 4.0, 0.0))  # center offset (opposite the apex)
+    O = M + c * nrm
+    P = M + h * nrm                               # apex (defines which way we sweep)
+    th_a = np.arctan2(a[1] - O[1], a[0] - O[0])
+    th_b = np.arctan2(b[1] - O[1], b[0] - O[0])
+    th_p = np.arctan2(P[1] - O[1], P[0] - O[0])
+    d = _wrap(th_b - th_a) or np.pi
+    if not (0.0 <= _wrap(th_p - th_a) / d <= 1.0):   # ensure the apex lies on the swept arc
+        d -= np.sign(d) * 2.0 * np.pi
+    pts = [O + R * np.array([np.cos(th_a + d * t), np.sin(th_a + d * t)])
+           for t in np.linspace(0.0, 1.0, n + 1)]
     return [(float(p[0]), float(p[1])) for p in pts]
 
 
