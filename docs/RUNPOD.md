@@ -192,7 +192,33 @@ The `curvature` field (κ) is fully supported end-to-end: it's a signed **sagitt
   fit a single arc to smooth multi-vertex polygon runs (instead of many short straight
   edges). Default is `0` (off) so the validated straight-wall parsers are byte-identical.
 
-Reality check: the public datasets are mostly Manhattan/slanted (straight). Real curved
-supervision is sparse, so turn `FIT_CURVES=1` only when a source actually has curves
-(e.g. curved balconies). The infrastructure is ready either way; GRPO's curvature
-refinement only kicks in once curved examples exist in training.
+Reality check: CubiCasa/MSD/S3D are mostly Manhattan/slanted (straight). The **synth**
+dataset below is the exception — it ships explicit curved-wall arcs, so curvature is
+learned from real labels there (no `FIT_CURVES` needed for it).
+
+## 12. Adding synth-floorseg (your own synthetic set — the richest source)
+This is your Vitruev generator's 10k synthetic plans: **rendered CAD images** + explicit
+vector geometry (wall centerlines + `thickness_mm` + **`arc`** for curved walls + room
+types + openings). It's the closest public-ish proxy to the paper's HQ data and the only
+source with genuine curved-wall supervision.
+
+**Get the data onto the pod**: it's your Kaggle dataset `synth-floorseg` (a zip of
+`configs/`, `rich_json/`, `images/`). Transfer it (Kaggle, `runpodctl send`, or cloud
+drive) and unzip so those three folders exist under one dir, then point `SYNTH_DIR` at it:
+```bash
+unzip -q synth_floorseg.zip -d /workspace/synth_data
+DATASETS=cubicasa,synth          # or struct3d,synth, etc.
+SYNTH_DIR=/workspace/synth_data
+# optional: SYNTH_MAX_SAMPLES=4000  to cap / tune the mix (10k available)
+```
+
+**Verify one plan** (validated locally — incl. a κ=1.0 semicircle reconstructed exactly):
+```bash
+python -m src.data_synth /workspace/synth_data   # prints walls/curved/rooms + *_debug.png
+```
+
+**How it's converted** (`src/data_synth.py`): solves the mm→px affine from `rich_json`
+same-point pairs (the generator's exact transform), maps wall centerlines + room polygons
++ openings to pixels, normalizes to longest-edge 1024, resizes the rendered PNG to match
+(pixel-aligned). Curved walls come straight from the `arc` field → exact `curvature`.
+Room types map to the unified taxonomy; openings → `center+width` on the nearest wall.

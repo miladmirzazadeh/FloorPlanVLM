@@ -83,7 +83,7 @@ python -m src.infer path/to/floorplan.png <HF_USER>/floorplan-vlm-sft   # SFT on
 ## Layout
 
 ```
-src/   config.py · prompts.py · taxonomy.py · geometry.py · data.py · data_msd.py · data_struct3d.py · rewards.py · hub_utils.py · train_sft.py · train_grpo.py · infer.py
+src/   config.py · prompts.py · taxonomy.py · geometry.py · data.py · data_msd.py · data_struct3d.py · data_synth.py · rewards.py · hub_utils.py · train_sft.py · train_grpo.py · infer.py
 scripts/  runpod_bootstrap.sh · run_pipeline.sh · status.sh · stop.sh
 docs/   RUNPOD.md   (pod setup, cost, multi-dataset, curved walls, scaling to Qwen-30B, troubleshooting)
 ```
@@ -103,10 +103,12 @@ openings → `center+width`) and shuffled together:
 | CubiCasa5K | `cubicasa` | auto (Zenodo) | real, default baseline |
 | **Structured3D** | `struct3d` | **auto** (39 MB annotations only) | **synthetic → pixel-perfect**, clean room types, slanted walls (paper's HQ trick) |
 | MSD | `msd` | manual ([4TU](https://data.4tu.nl/datasets/e1d89cb5-6872-48fc-be63-aadd687ee6f9)) | real, complex multi-unit geometry |
+| **synth-floorseg** | `synth` | manual (Kaggle zip) | **richest**: synthetic CAD renders + explicit wall centerlines/thickness, **real curved-wall arcs**, room types |
 
-E.g. `DATASETS=cubicasa,struct3d,msd`. The Structured3D parser is validated on real data
-(30/30 scenes). Full steps, per-dataset caps for the mix ratio, and one-file verification
-commands are in [docs/RUNPOD.md §9–10](docs/RUNPOD.md).
+E.g. `DATASETS=cubicasa,struct3d,synth`. Both the Structured3D and synth parsers are
+validated on real data (S3D 30/30 scenes; synth incl. curved walls — a κ=1.0 semicircle
+reconstructed exactly). Full steps, per-dataset caps for the mix ratio, and one-file
+verification commands are in [docs/RUNPOD.md §9–12](docs/RUNPOD.md).
 
 ## Provenance & license
 

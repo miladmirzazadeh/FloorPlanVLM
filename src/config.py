@@ -84,6 +84,12 @@ S3D_ANNOT_URL = _s(
 S3D_MAX_SAMPLES = _opt_i("S3D_MAX_SAMPLES", None)
 S3D_WALL_THICKNESS = _i("S3D_WALL_THICKNESS", 10)  # nominal (S3D walls are idealized planes)
 
+# synth-floorseg — the user's own 10k synthetic set (Kaggle: synth-floorseg).
+# Point SYNTH_DIR at the unzipped folder containing configs/ rich_json/ images/.
+SYNTH_DIR = _s("SYNTH_DIR", "./synth_data")
+SYNTH_RENDER_DIR = _s("SYNTH_RENDER_DIR", os.path.join(SYNTH_DIR, "rendered"))
+SYNTH_MAX_SAMPLES = _opt_i("SYNTH_MAX_SAMPLES", None)
+
 # ── Data shaping ──────────────────────────────────────────────────────────────
 MAX_JSON_CHARS = _i("MAX_JSON_CHARS", 10000)
 MAX_SAMPLES = _opt_i("MAX_SAMPLES", None)  # None = all ~5k plans
@@ -129,6 +135,7 @@ if SMOKE_TEST:
     MAX_SAMPLES = min(MAX_SAMPLES or 40, 40)
     MSD_MAX_SAMPLES = min(MSD_MAX_SAMPLES or 40, 40)
     S3D_MAX_SAMPLES = min(S3D_MAX_SAMPLES or 40, 40)
+    SYNTH_MAX_SAMPLES = min(SYNTH_MAX_SAMPLES or 40, 40)
     NUM_EPOCHS_SFT = 1
     SAVE_STEPS_SFT = 5
     GRPO_MAX_SAMPLES = min(GRPO_MAX_SAMPLES or 16, 16)

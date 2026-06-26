@@ -73,3 +73,27 @@ S3D_ROOM_MAP = {
     "garage": "garage",
     "undefined": "room",
 }
+
+# ── synth-floorseg (user's Vitruev synthetic generator) ──────────────────────
+# config rooms[].room_type -> unified label. Unknown types fall back to "room".
+SYNTH_ROOM_MAP = {
+    "bedroom": "bedroom", "master_bedroom": "bedroom", "guest_room": "bedroom",
+    "single_room": "room", "ward_bay": "room", "room": "room",
+    "living": "living_room", "open_plan": "living_room", "lounge": "living_room",
+    "kitchen": "kitchen", "kitchen_staff": "kitchen",
+    "dining": "dining", "dining_area": "dining",
+    "bathroom": "bathroom", "bathroom_en_suite": "bathroom", "WC": "bathroom",
+    "shower": "bathroom", "changing_room": "bathroom",
+    "corridor": "corridor", "hallway": "corridor", "hall": "corridor",
+    "lobby": "corridor", "lift_lobby": "corridor", "reception": "corridor",
+    "balcony": "balcony", "garage": "garage", "loading_bay": "garage",
+    "storage": "storage", "store": "storage", "stockroom": "storage",
+    "st:ockroom": "storage", "linen_cupboard": "storage", "wardrobe": "storage",
+    "bin_store": "storage", "cycle_store": "storage", "cold_room": "storage",
+    "store_room": "storage",
+    "office": "office", "private_office": "office", "meeting_room": "office",
+    "study": "office",
+    "stair": "stairwell", "staircase": "stairwell",
+    "utility": "utility", "service_room": "utility", "plant_room": "utility",
+    "sluice": "utility", "workshop": "utility",
+}
