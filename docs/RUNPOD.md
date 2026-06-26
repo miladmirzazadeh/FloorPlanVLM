@@ -144,3 +144,39 @@ deduped walls; wall *thickness* is estimated from the Structure mask, not exact)
 MSD mainly teaches **geometric complexity**; room *type* is intentionally not colour-
 leaked into the rendered input, so type labels from MSD are weaker supervision than
 its geometry. Mix it with CubiCasa rather than training on MSD alone.
+
+## 10. Adding Structured3D — synthetic, pixel-perfect (the paper's HQ trick)
+Structured3D is **synthetic**, so its geometry is exact: rendering a 2D floor plan from
+it gives **pixel-perfect (image, JSON) pairs** — the single most impactful public proxy
+for the paper's HQ-300K subset. Unlike MSD it has clean **vector** rooms AND real
+**room-type** labels, plus non-Manhattan (slanted) walls.
+
+**You only need the ~39 MB structure-annotation zip — NOT the 50+ multi-GB image zips**
+(those are 3D renders we don't use; we draw our own top-down plans). It's
+**auto-downloaded** on first use, so just enable it:
+```bash
+DATASETS=cubicasa,struct3d         # or: cubicasa,msd,struct3d
+# S3D_DIR=/workspace/s3d_data       # where the annotation zip extracts (default ./s3d_data)
+# S3D_MAX_SAMPLES=2000              # cap / tune the mix (3500 scenes total)
+```
+
+**Verify one scene** (validated on real data here — 30/30 scenes converted):
+```bash
+python -m src.data_struct3d /workspace/s3d_data    # prints counts + saves *_debug.png
+```
+
+**How it's converted** (`src/data_struct3d.py`): each scene's `annotation_3d.json` gives
+3D junctions/planes; we project floor planes to 2D → room polygons (+ type), derive walls
+from room edges (deduped), and project door/window planes → `center+width` openings.
+Coordinates normalized to longest-edge 1024; image rendered to match → pixel-aligned.
+Wall *thickness* is nominal (S3D walls are idealized zero-thickness planes).
+
+**License:** Structured3D is for **non-commercial research**; make sure you've accepted
+its [terms](https://structured3d-dataset.org/) before downloading. (Note: since CubiCasa
+is also non-commercial, the whole project is already non-commercial.)
+
+### Recommended data ladder
+1. **CubiCasa only** — validate the pipeline (Stage 1 → Stage 2).
+2. **+ struct3d** — biggest quality lever: pixel-perfect data + clean room types.
+3. **+ msd** — adds real, complex multi-unit geometry for robustness.
+Use `S3D_MAX_SAMPLES` / `MSD_MAX_SAMPLES` / `MAX_SAMPLES` to control the mix ratio.

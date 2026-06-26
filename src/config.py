@@ -74,6 +74,16 @@ MSD_DIR = _s("MSD_DIR", "./msd_data")
 MSD_RENDER_DIR = _s("MSD_RENDER_DIR", os.path.join(MSD_DIR, "rendered"))
 MSD_MAX_SAMPLES = _opt_i("MSD_MAX_SAMPLES", None)
 
+# Structured3D — we only need the ~39MB structure-annotation zip (auto-downloaded).
+S3D_DIR = _s("S3D_DIR", "./s3d_data")
+S3D_RENDER_DIR = _s("S3D_RENDER_DIR", os.path.join(S3D_DIR, "rendered"))
+S3D_ANNOT_URL = _s(
+    "S3D_ANNOT_URL",
+    "https://zju-kjl-jointlab-azure.kujiale.com/Structured3D/Structured3D_annotation_3d.zip",
+)
+S3D_MAX_SAMPLES = _opt_i("S3D_MAX_SAMPLES", None)
+S3D_WALL_THICKNESS = _i("S3D_WALL_THICKNESS", 10)  # nominal (S3D walls are idealized planes)
+
 # ── Data shaping ──────────────────────────────────────────────────────────────
 MAX_JSON_CHARS = _i("MAX_JSON_CHARS", 10000)
 MAX_SAMPLES = _opt_i("MAX_SAMPLES", None)  # None = all ~5k plans
@@ -114,6 +124,7 @@ SMOKE_TEST = _b("SMOKE_TEST", False)
 if SMOKE_TEST:
     MAX_SAMPLES = min(MAX_SAMPLES or 40, 40)
     MSD_MAX_SAMPLES = min(MSD_MAX_SAMPLES or 40, 40)
+    S3D_MAX_SAMPLES = min(S3D_MAX_SAMPLES or 40, 40)
     NUM_EPOCHS_SFT = 1
     SAVE_STEPS_SFT = 5
     GRPO_MAX_SAMPLES = min(GRPO_MAX_SAMPLES or 16, 16)

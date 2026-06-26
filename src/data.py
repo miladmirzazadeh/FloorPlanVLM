@@ -260,7 +260,10 @@ def _load_one(name, want_records):
     if name == "msd":
         from .data_msd import build_msd_records
         return build_msd_records(config.MSD_DIR, config.MSD_MAX_SAMPLES, want_records=want_records)
-    raise ValueError(f"unknown dataset '{name}' (supported: cubicasa, msd)")
+    if name in ("struct3d", "s3d", "structured3d"):
+        from .data_struct3d import build_struct3d_records
+        return build_struct3d_records(config.S3D_DIR, config.S3D_MAX_SAMPLES, want_records=want_records)
+    raise ValueError(f"unknown dataset '{name}' (supported: cubicasa, msd, struct3d)")
 
 
 def get_sft_datasets():

@@ -88,14 +88,21 @@ scripts/  runpod_bootstrap.sh · run_pipeline.sh · status.sh · stop.sh
 docs/   RUNPOD.md   (pod setup, cost, MSD multi-dataset, scaling to Qwen-30B, troubleshooting)
 ```
 
-## More data (optional): MSD multi-dataset
+## More data (optional): multi-dataset training
 
-CubiCasa-only is the default. To mix in **MSD (Modified Swiss Dwellings)** — 5.3K real,
-complex multi-unit European plans — download it once and set `DATASETS=cubicasa,msd`
-+ `MSD_DIR=...`. Coordinates and room-label taxonomy are harmonized across datasets in
-[`src/taxonomy.py`](src/taxonomy.py); walls are rebuilt from MSD's segmentation masks
-(its graph omits them). Full steps + the one-file verification command are in
-[docs/RUNPOD.md §9](docs/RUNPOD.md).
+CubiCasa-only is the default. Mix in more data by setting `DATASETS` — sources are
+harmonized (coords → 1024, unified room labels in [`src/taxonomy.py`](src/taxonomy.py),
+openings → `center+width`) and shuffled together:
+
+| Dataset | `DATASETS` token | Get it | Why |
+|---|---|---|---|
+| CubiCasa5K | `cubicasa` | auto (Zenodo) | real, default baseline |
+| **Structured3D** | `struct3d` | **auto** (39 MB annotations only) | **synthetic → pixel-perfect**, clean room types, slanted walls (paper's HQ trick) |
+| MSD | `msd` | manual ([4TU](https://data.4tu.nl/datasets/e1d89cb5-6872-48fc-be63-aadd687ee6f9)) | real, complex multi-unit geometry |
+
+E.g. `DATASETS=cubicasa,struct3d,msd`. The Structured3D parser is validated on real data
+(30/30 scenes). Full steps, per-dataset caps for the mix ratio, and one-file verification
+commands are in [docs/RUNPOD.md §9–10](docs/RUNPOD.md).
 
 ## Provenance & license
 

@@ -51,3 +51,25 @@ MSD_ROOM_INDICES = {
 MSD_STRUCTURE_INDEX = 9
 MSD_DOOR_INDICES = (10, 11)   # Door, Entrance Door
 MSD_WINDOW_INDEX = 12
+
+# ── Structured3D ──────────────────────────────────────────────────────────────
+# semantic 'type' strings from the official misc/colors.py -> unified label.
+# ('door'/'window'/'outwall' are handled separately, not as rooms.)
+S3D_ROOM_MAP = {
+    "living room": "living_room",
+    "kitchen": "kitchen",
+    "bedroom": "bedroom",
+    "bathroom": "bathroom",
+    "balcony": "balcony",
+    "corridor": "corridor",
+    "dining room": "dining",
+    "study": "office",
+    "studio": "room",
+    "store room": "storage",
+    "garden": "outdoor",
+    "laundry room": "utility",
+    "office": "office",
+    "basement": "room",
+    "garage": "garage",
+    "undefined": "room",
+}
