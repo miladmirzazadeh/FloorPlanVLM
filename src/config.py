@@ -88,6 +88,10 @@ S3D_WALL_THICKNESS = _i("S3D_WALL_THICKNESS", 10)  # nominal (S3D walls are idea
 MAX_JSON_CHARS = _i("MAX_JSON_CHARS", 10000)
 MAX_SAMPLES = _opt_i("MAX_SAMPLES", None)  # None = all ~5k plans
 EVAL_RATIO = _f("EVAL_RATIO", 0.03)        # held-out split for best-model tracking
+# Detect curved walls (fit a single arc to smooth polygon runs) instead of many
+# short straight edges. Experimental; off by default so validated parsers are
+# byte-identical. Curvature is always honored in the schema/reward/render.
+FIT_CURVES = _b("FIT_CURVES", False)
 
 # ── LoRA ──────────────────────────────────────────────────────────────────────
 LORA_R = _i("LORA_R", 16)

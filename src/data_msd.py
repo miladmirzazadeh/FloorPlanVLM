@@ -31,6 +31,7 @@ from .prompts import SYSTEM_PROMPT, USER_PROMPT
 from .taxonomy import (
     MSD_ROOM_INDICES, MSD_STRUCTURE_INDEX, MSD_DOOR_INDICES, MSD_WINDOW_INDEX,
 )
+from .geometry import rooms_to_walls
 
 try:
     import cv2
@@ -100,36 +101,6 @@ def _estimate_thickness(mask):
     return float(np.median(vals) * 2.0) if len(vals) else 4.0
 
 
-def _rooms_to_walls(rooms, thickness, tol=2.0):
-    """rooms: list[(label, Nx2 array)] -> (walls, [(label, [wall_id,...])])."""
-    def canon(p):
-        return (round(p[0] / tol) * tol, round(p[1] / tol) * tol)
-
-    walls, index, room_walls = [], {}, []
-    for label, poly in rooms:
-        ids, n = [], len(poly)
-        for i in range(n):
-            a, b = poly[i], poly[(i + 1) % n]
-            if np.hypot(a[0] - b[0], a[1] - b[1]) < tol:
-                continue
-            key = tuple(sorted([canon(a), canon(b)]))
-            if key not in index:
-                wid = f"wall_{len(walls) + 1}"
-                index[key] = wid
-                walls.append({
-                    "id": wid,
-                    "start": [round(float(a[0])), round(float(a[1]))],
-                    "end": [round(float(b[0])), round(float(b[1]))],
-                    "thickness": max(round(thickness), 1),
-                    "curvature": 0,
-                    "openings": [],
-                })
-            if index[key] not in ids:
-                ids.append(index[key])
-        room_walls.append((label, ids))
-    return walls, room_walls
-
-
 def _assign_openings(walls, openings):
     if not walls:
         return
@@ -175,7 +146,7 @@ def mask_to_record(mask):
         return None
 
     thickness = _estimate_thickness(mask) * scale
-    walls, room_walls = _rooms_to_walls(rooms, thickness)
+    walls, room_walls = rooms_to_walls(rooms, thickness, fit_curves=config.FIT_CURVES)
     if not walls:
         return None
 

@@ -180,3 +180,19 @@ is also non-commercial, the whole project is already non-commercial.)
 2. **+ struct3d** — biggest quality lever: pixel-perfect data + clean room types.
 3. **+ msd** — adds real, complex multi-unit geometry for robustness.
 Use `S3D_MAX_SAMPLES` / `MSD_MAX_SAMPLES` / `MAX_SAMPLES` to control the mix ratio.
+
+## 11. Curved walls
+The `curvature` field (κ) is fully supported end-to-end: it's a signed **sagitta ratio**
+`κ = 2·h/L` (0 = straight, ±1 = semicircle; sign = bulge direction; scale-invariant).
+
+- **Reward & rendering are arc-aware always** (`src/geometry.py`): the GRPO IoU reward
+  reconstructs the arc, and every renderer draws it — so a correct curved prediction is
+  rewarded, not penalized as if it were straight. This is on regardless of settings.
+- **Producing curved labels is opt-in**: set `FIT_CURVES=1` to make the MSD/S3D parsers
+  fit a single arc to smooth multi-vertex polygon runs (instead of many short straight
+  edges). Default is `0` (off) so the validated straight-wall parsers are byte-identical.
+
+Reality check: the public datasets are mostly Manhattan/slanted (straight). Real curved
+supervision is sparse, so turn `FIT_CURVES=1` only when a source actually has curves
+(e.g. curved balconies). The infrastructure is ready either way; GRPO's curvature
+refinement only kicks in once curved examples exist in training.

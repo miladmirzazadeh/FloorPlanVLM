@@ -83,10 +83,14 @@ python -m src.infer path/to/floorplan.png <HF_USER>/floorplan-vlm-sft   # SFT on
 ## Layout
 
 ```
-src/   config.py · prompts.py · taxonomy.py · data.py · data_msd.py · rewards.py · hub_utils.py · train_sft.py · train_grpo.py · infer.py
+src/   config.py · prompts.py · taxonomy.py · geometry.py · data.py · data_msd.py · data_struct3d.py · rewards.py · hub_utils.py · train_sft.py · train_grpo.py · infer.py
 scripts/  runpod_bootstrap.sh · run_pipeline.sh · status.sh · stop.sh
-docs/   RUNPOD.md   (pod setup, cost, MSD multi-dataset, scaling to Qwen-30B, troubleshooting)
+docs/   RUNPOD.md   (pod setup, cost, multi-dataset, curved walls, scaling to Qwen-30B, troubleshooting)
 ```
+
+Curved walls are supported end-to-end via a signed-sagitta `curvature` field — the GRPO
+IoU reward and all renderers are arc-aware ([`src/geometry.py`](src/geometry.py)); set
+`FIT_CURVES=1` to have parsers fit arcs to curved geometry ([docs/RUNPOD.md §11](docs/RUNPOD.md)).
 
 ## More data (optional): multi-dataset training
 

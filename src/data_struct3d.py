@@ -33,6 +33,7 @@ from shapely.geometry import LineString, Point
 from . import config
 from .prompts import SYSTEM_PROMPT, USER_PROMPT
 from .taxonomy import S3D_ROOM_MAP
+from .geometry import arc_points, rooms_to_walls
 
 TARGET = 1024
 
@@ -103,32 +104,6 @@ def _opening_junctions(annos, plane_ids):
     return list(ids)
 
 
-def _polys_to_walls(rooms, thickness, tol=2.0):
-    def canon(p):
-        return (round(p[0] / tol) * tol, round(p[1] / tol) * tol)
-
-    walls, index, room_walls = [], {}, []
-    for label, poly in rooms:
-        ids, n = [], len(poly)
-        for i in range(n):
-            a, b = poly[i], poly[(i + 1) % n]
-            if np.hypot(a[0] - b[0], a[1] - b[1]) < tol:
-                continue
-            key = tuple(sorted([canon(a), canon(b)]))
-            if key not in index:
-                wid = f"wall_{len(walls) + 1}"
-                index[key] = wid
-                walls.append({"id": wid,
-                              "start": [round(float(a[0])), round(float(a[1]))],
-                              "end": [round(float(b[0])), round(float(b[1]))],
-                              "thickness": max(round(thickness), 1),
-                              "curvature": 0, "openings": []})
-            if index[key] not in ids:
-                ids.append(index[key])
-        room_walls.append((label, ids))
-    return walls, room_walls
-
-
 def _assign_openings(walls, openings):
     if not walls:
         return
@@ -151,12 +126,12 @@ def _render(rooms, walls, W, H):
         if len(poly) >= 3:
             d.polygon([tuple(p) for p in poly], fill=(230, 230, 230))
     for w in walls:
-        d.line([tuple(w["start"]), tuple(w["end"])], fill=(0, 0, 0),
-               width=max(int(w["thickness"]), 2))
+        d.line(arc_points(w["start"], w["end"], w.get("curvature", 0)),
+               fill=(0, 0, 0), width=max(int(w["thickness"]), 2))
     for w in walls:
         if not w["openings"]:
             continue
-        line = LineString([w["start"], w["end"]])
+        line = LineString(arc_points(w["start"], w["end"], w.get("curvature", 0)))
         length = line.length or 1.0
         (sx, sy), (ex, ey) = w["start"], w["end"]
         ux, uy = (ex - sx) / length, (ey - sy) / length
@@ -203,7 +178,7 @@ def scene_to_record(annos):
 
     rooms = [(label, norm(poly)) for label, poly in raw_rooms]
     thickness = config.S3D_WALL_THICKNESS
-    walls, room_walls = _polys_to_walls(rooms, thickness)
+    walls, room_walls = rooms_to_walls(rooms, thickness, fit_curves=config.FIT_CURVES)
     if not walls:
         return None
 

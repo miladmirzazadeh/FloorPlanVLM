@@ -15,8 +15,7 @@ single malformed completion can never crash a training step.
 import json
 import re
 
-from shapely.geometry import LineString
-from shapely.ops import unary_union
+from .geometry import walls_union
 
 
 def extract_json(text):
@@ -37,16 +36,12 @@ def extract_json(text):
 
 
 def walls_to_polygon(walls):
+    """External footprint of the wall set (arc-aware via geometry.walls_union)."""
     if not walls or len(walls) < 3:
         return None
     try:
-        polys = []
-        for w in walls:
-            s, e = w.get("start", [0, 0]), w.get("end", [0, 0])
-            t = max(w.get("thickness", 10), 1)
-            polys.append(LineString([s, e]).buffer(t / 2, cap_style=2))
-        combined = unary_union(polys)
-        return combined.convex_hull if not combined.is_empty else None
+        combined = walls_union(walls)
+        return combined.convex_hull if combined is not None else None
     except Exception:
         return None
 
