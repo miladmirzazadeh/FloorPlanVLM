@@ -68,8 +68,12 @@ DATASETS = [d.strip() for d in _s("DATASETS", "cubicasa,struct3d,msd,synth").spl
 # explicitly with GRPO_DATASETS="cubicasa,struct3d".
 SYNTH_ALIASES = {"synth", "synth-floorseg", "synthfloorseg"}
 _grpo_env = _s("GRPO_DATASETS", "")
-GRPO_DATASETS = ([d.strip() for d in _grpo_env.split(",") if d.strip()] if _grpo_env
-                 else [d for d in DATASETS if d.lower() not in SYNTH_ALIASES])
+if _grpo_env:
+    GRPO_DATASETS = [d.strip() for d in _grpo_env.split(",") if d.strip()]
+elif _b("WALLS_ONLY", False):
+    GRPO_DATASETS = list(DATASETS)   # walls-only has no topology -> synth walls are fine in GRPO
+else:
+    GRPO_DATASETS = [d for d in DATASETS if d.lower() not in SYNTH_ALIASES]
 
 # ── Paths (persistent volume on RunPod is /workspace) ─────────────────────────
 DATA_DIR = _s("DATA_DIR", "./cubicasa_data")
@@ -108,6 +112,11 @@ EVAL_RATIO = _f("EVAL_RATIO", 0.03)        # held-out split for best-model track
 # short straight edges. Experimental; off by default so validated parsers are
 # byte-identical. Curvature is always honored in the schema/reward/render.
 FIT_CURVES = _b("FIT_CURVES", False)
+
+# Walls-only mode: the model extracts ONLY walls (a downstream VLM handles rooms/
+# openings/semantics). Strips rooms+openings from all targets and uses a walls-only
+# prompt -> shorter outputs, faster/cheaper, better wall accuracy, every dataset usable.
+WALLS_ONLY = _b("WALLS_ONLY", False)
 
 # ── LoRA ──────────────────────────────────────────────────────────────────────
 LORA_R = _i("LORA_R", 16)

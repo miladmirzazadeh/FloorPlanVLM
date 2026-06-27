@@ -264,22 +264,44 @@ def _write_annotations(annotations):
     print(f"[data] wrote {config.ANN_PATH} ({len(annotations)} entries)")
 
 
+def _to_walls_only(js):
+    """Drop rooms + per-wall openings, keep only wall geometry."""
+    try:
+        d = json.loads(js)
+    except Exception:
+        return js
+    walls = [{k: w[k] for k in ("id", "start", "end", "thickness", "curvature") if k in w}
+             for w in d.get("walls", [])]
+    return json.dumps({"walls": walls}, separators=(",", ":"))
+
+
 def _load_one(name, want_records):
     """Return (records, annotations) for a single dataset, already harmonized."""
     name = name.lower()
     if name == "cubicasa":
-        data_dir = download_and_extract()
-        return _build(data_dir, config.MAX_SAMPLES, want_records=want_records)
-    if name == "msd":
+        recs, anns = _build(download_and_extract(), config.MAX_SAMPLES, want_records=want_records)
+    elif name == "msd":
         from .data_msd import build_msd_records
-        return build_msd_records(config.MSD_DIR, config.MSD_MAX_SAMPLES, want_records=want_records)
-    if name in ("struct3d", "s3d", "structured3d"):
+        recs, anns = build_msd_records(config.MSD_DIR, config.MSD_MAX_SAMPLES, want_records=want_records)
+    elif name in ("struct3d", "s3d", "structured3d"):
         from .data_struct3d import build_struct3d_records
-        return build_struct3d_records(config.S3D_DIR, config.S3D_MAX_SAMPLES, want_records=want_records)
-    if name in ("synth", "synth-floorseg", "synthfloorseg"):
+        recs, anns = build_struct3d_records(config.S3D_DIR, config.S3D_MAX_SAMPLES, want_records=want_records)
+    elif name in ("synth", "synth-floorseg", "synthfloorseg"):
         from .data_synth import build_synth_records
-        return build_synth_records(config.SYNTH_DIR, config.SYNTH_MAX_SAMPLES, want_records=want_records)
-    raise ValueError(f"unknown dataset '{name}' (supported: cubicasa, msd, struct3d, synth)")
+        recs, anns = build_synth_records(config.SYNTH_DIR, config.SYNTH_MAX_SAMPLES, want_records=want_records)
+    else:
+        raise ValueError(f"unknown dataset '{name}' (supported: cubicasa, msd, struct3d, synth)")
+
+    if config.WALLS_ONLY:
+        for a in anns:
+            a["json_annotation"] = _to_walls_only(a["json_annotation"])
+        for r in recs:
+            try:
+                r["messages"][2]["content"][0]["text"] = _to_walls_only(
+                    r["messages"][2]["content"][0]["text"])
+            except Exception:
+                pass
+    return recs, anns
 
 
 def get_sft_datasets():
