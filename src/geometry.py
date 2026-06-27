@@ -135,6 +135,28 @@ def region_iou(pred_walls, gt_walls, thr=0.5):
     return float(np.mean(ious)) if ious else 0.0
 
 
+def topology_ok(walls, tol=8.0, min_junction_frac=0.85, min_walls=4):
+    """Reject topologically-broken plans (floating walls, unclosed loops).
+    A plan passes if (1) most wall endpoints touch another wall's SEGMENT — counts
+    both corner and T-junctions, only true free ends are 'hanging' — and (2) the
+    walls enclose at least one face. Tol is in normalized-1024 px."""
+    from shapely.geometry import Point
+    walls = [w for w in walls if isinstance(w.get("start"), list) and isinstance(w.get("end"), list)]
+    if len(walls) < min_walls:
+        return False
+    lines = [LineString(wall_polyline(w)) for w in walls]
+    connected = total = 0
+    for i, w in enumerate(walls):
+        for end in (w["start"], w["end"]):
+            total += 1
+            p = Point(end)
+            if any(j != i and lines[j].distance(p) <= tol for j in range(len(walls))):
+                connected += 1
+    if total == 0:
+        return False
+    return (connected / total) >= min_junction_frac and len(wall_faces(walls)) >= 1
+
+
 def walls_union(walls):
     polys = []
     for w in walls:

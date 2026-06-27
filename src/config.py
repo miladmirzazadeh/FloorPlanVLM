@@ -103,6 +103,11 @@ S3D_WALL_THICKNESS = _i("S3D_WALL_THICKNESS", 10)  # nominal (S3D walls are idea
 SYNTH_DIR = _s("SYNTH_DIR", "./synth_data")
 SYNTH_RENDER_DIR = _s("SYNTH_RENDER_DIR", os.path.join(SYNTH_DIR, "rendered"))
 SYNTH_MAX_SAMPLES = _opt_i("SYNTH_MAX_SAMPLES", None)
+# The generator has topology artifacts (unclosed loops, floating walls). Keep only
+# topologically-clean plans for the pixel-perfect tier — bad GT would poison Stage 2
+# and the GRPO closure reward. Quality over quantity.
+SYNTH_TOPO_FILTER = _b("SYNTH_TOPO_FILTER", True)
+SYNTH_TOPO_MIN_JUNCTION = _f("SYNTH_TOPO_MIN_JUNCTION", 0.8)
 
 # ── Data shaping ──────────────────────────────────────────────────────────────
 MAX_JSON_CHARS = _i("MAX_JSON_CHARS", 10000)

@@ -26,7 +26,7 @@ from shapely.geometry import LineString, Point, Polygon
 from . import config
 from .prompts import SYSTEM_PROMPT, USER_PROMPT
 from .taxonomy import SYNTH_ROOM_MAP
-from .geometry import fit_curvature, wall_polyline
+from .geometry import fit_curvature, wall_polyline, topology_ok
 
 TARGET = 1024
 PLAN_RE = re.compile(r"(plan_\d+)")
@@ -188,10 +188,10 @@ def build_synth_records(synth_dir, max_samples=None, want_records=True):
     render_dir = config.SYNTH_RENDER_DIR
     os.makedirs(render_dir, exist_ok=True)
 
-    records, annotations, errors = [], [], 0
+    records, annotations, errors, filtered = [], [], 0, 0
     for k, pid in enumerate(ids):
         if k % 200 == 0:
-            print(f"[synth]   {k}/{len(ids)} ({len(annotations)} ok, {errors} err)")
+            print(f"[synth]   {k}/{len(ids)} ({len(annotations)} ok, {filtered} topo-filtered, {errors} err)")
         try:
             cfg = json.loads(open(cfgs[pid]).read())
             rich = json.loads(open(riches[pid]).read())
@@ -200,6 +200,10 @@ def build_synth_records(synth_dir, max_samples=None, want_records=True):
                 errors += 1
                 continue
             img, jd = res
+            if config.SYNTH_TOPO_FILTER and not topology_ok(
+                    jd["walls"], min_junction_frac=config.SYNTH_TOPO_MIN_JUNCTION):
+                filtered += 1   # drop unclosed-loop / floating-wall plans
+                continue
             js = json.dumps(jd, separators=(",", ":"))
             if len(js) > config.MAX_JSON_CHARS:
                 continue
@@ -212,7 +216,10 @@ def build_synth_records(synth_dir, max_samples=None, want_records=True):
             errors += 1
             if errors <= 3:
                 print(f"[synth]   err {pid}: {e}")
-    print(f"[synth] built {len(annotations)} samples ({errors} errors)")
+    kept = len(annotations)
+    tot = kept + filtered
+    print(f"[synth] built {kept} clean samples ({filtered} topo-filtered = "
+          f"{100*filtered/max(tot,1):.0f}% rejected, {errors} errors)")
     return records, annotations
 
 
