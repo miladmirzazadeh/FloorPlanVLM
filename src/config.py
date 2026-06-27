@@ -53,32 +53,32 @@ def _derive_repo(stage):
     return f"floorplan-vlm-{stage}"
 
 
-REPO_SFT = _derive_repo("sft")    # checkpoints + final SFT adapter live here
-REPO_GRPO = _derive_repo("grpo")  # checkpoints + final GRPO adapter live here
+REPO_SFT1 = _derive_repo("sft1")  # Stage-1 (structural grounding) adapter
+REPO_SFT = _derive_repo("sft")    # Stage-2 (quality annealing) = final SFT adapter
+REPO_GRPO = _derive_repo("grpo")  # Stage-3 (GRPO) adapter
 
-# ── Datasets ──────────────────────────────────────────────────────────────────
-# Comma-separated, mixed after harmonization. Default = ALL sources; each that
-# isn't present on the box is auto-skipped (cubicasa + struct3d auto-download;
-# msd + synth need their data dirs). Set DATASETS="cubicasa" for a quick baseline.
-DATASETS = [d.strip() for d in _s("DATASETS", "cubicasa,struct3d,msd,synth").split(",") if d.strip()]
-
-# synth-floorseg's room topology is procedurally generated, so it's kept OUT of the
-# GRPO/Stage-2 reward (which scores room topology via R_int). By default GRPO uses
-# every dataset EXCEPT synth; synth still trains in Stage-1 SFT for geometry. Override
-# explicitly with GRPO_DATASETS="cubicasa,struct3d".
-SYNTH_ALIASES = {"synth", "synth-floorseg", "synthfloorseg"}
+# ── Datasets: paper-faithful curriculum (§4.4 Progressive Training) ─────────────
+# Stage 1 "Structural Grounding" (paper's Floorplan-2M): large, DIVERSE, REAL data —
+#   coordinate-noisy; learns generalized layout/topology, NOT pixel precision.
+STAGE1_DATASETS = [d.strip() for d in _s("STAGE1_DATASETS", "cubicasa,msd").split(",") if d.strip()]
+# Stage 2 "Quality Annealing" (paper's Floorplan-HQ-300K, ~93% synthetic-rendered):
+#   PIXEL-PERFECT synthetic data (rendered from exact vectors) for watertight precision.
+STAGE2_DATASETS = [d.strip() for d in _s("STAGE2_DATASETS", "synth,struct3d").split(",") if d.strip()]
+# Which SFT stage this process runs (run_pipeline.sh sets it: 1 then 2).
+SFT_STAGE = _i("SFT_STAGE", 1)
+# Union — used by eval / any non-staged path.
+_UNION = list(dict.fromkeys(STAGE1_DATASETS + STAGE2_DATASETS))
+DATASETS = [d.strip() for d in _s("DATASETS", ",".join(_UNION)).split(",") if d.strip()]
+# GRPO runs on the pixel-perfect Stage-2 data (paper applies GRPO after HQ annealing).
 _grpo_env = _s("GRPO_DATASETS", "")
-if _grpo_env:
-    GRPO_DATASETS = [d.strip() for d in _grpo_env.split(",") if d.strip()]
-elif _b("WALLS_ONLY", False):
-    GRPO_DATASETS = list(DATASETS)   # walls-only has no topology -> synth walls are fine in GRPO
-else:
-    GRPO_DATASETS = [d for d in DATASETS if d.lower() not in SYNTH_ALIASES]
+GRPO_DATASETS = ([d.strip() for d in _grpo_env.split(",") if d.strip()] if _grpo_env
+                 else list(STAGE2_DATASETS))
 
 # ── Paths (persistent volume on RunPod is /workspace) ─────────────────────────
 DATA_DIR = _s("DATA_DIR", "./cubicasa_data")
 ANN_PATH = os.path.join(DATA_DIR, "annotations.json")  # combined, all datasets
 ZENODO_URL = _s("ZENODO_URL", "https://zenodo.org/record/2613548/files/cubicasa5k.zip?download=1")
+OUTPUT_DIR_SFT1 = _s("OUTPUT_DIR_SFT1", "./outputs/sft1")
 OUTPUT_DIR_SFT = _s("OUTPUT_DIR_SFT", "./outputs/sft")
 OUTPUT_DIR_GRPO = _s("OUTPUT_DIR_GRPO", "./outputs/grpo")
 
@@ -127,7 +127,9 @@ LORA_TARGETS = _s(
 ).split(",")
 
 # ── SFT (paper Stages 1+2) ────────────────────────────────────────────────────
-NUM_EPOCHS_SFT = _i("NUM_EPOCHS_SFT", 2)
+NUM_EPOCHS_SFT1 = _i("NUM_EPOCHS_SFT1", 2)   # paper: 2 epochs on Floorplan-2M (grounding)
+NUM_EPOCHS_SFT2 = _i("NUM_EPOCHS_SFT2", 3)   # paper: 10 epochs on HQ-300K (scaled to our data size)
+NUM_EPOCHS_SFT = _i("NUM_EPOCHS_SFT", 2)     # legacy single-stage fallback
 BATCH_SIZE_SFT = _i("BATCH_SIZE_SFT", 1)
 GRAD_ACCUM_SFT = _i("GRAD_ACCUM_SFT", 8)
 LR_SFT = _f("LR_SFT", 2e-5)
@@ -155,6 +157,8 @@ if SMOKE_TEST:
     MSD_MAX_SAMPLES = min(MSD_MAX_SAMPLES or 40, 40)
     S3D_MAX_SAMPLES = min(S3D_MAX_SAMPLES or 40, 40)
     SYNTH_MAX_SAMPLES = min(SYNTH_MAX_SAMPLES or 40, 40)
+    NUM_EPOCHS_SFT1 = 1
+    NUM_EPOCHS_SFT2 = 1
     NUM_EPOCHS_SFT = 1
     SAVE_STEPS_SFT = 5
     GRPO_MAX_SAMPLES = min(GRPO_MAX_SAMPLES or 16, 16)

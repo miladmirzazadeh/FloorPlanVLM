@@ -1,10 +1,12 @@
-"""Stage 1+2: Supervised fine-tuning of Qwen2.5-VL on CubiCasa5K (LoRA).
+"""Supervised fine-tuning — paper-faithful 2-stage curriculum (§4.4).
 
-Resumable & crash-safe:
-  * checkpoints stream to the Hub during training (hub_strategy='all_checkpoints');
-  * on (re)start we pull the latest Hub checkpoint and resume_from_checkpoint;
-  * a FINISHED marker on the Hub makes the whole stage a no-op once complete, so the
-    watchdog can re-run this safely on a fresh pod.
+Selected by SFT_STAGE (run_pipeline.sh runs 1 then 2):
+  Stage 1 "Structural Grounding"  — new LoRA on diverse REAL data (STAGE1_DATASETS)
+                                     -> generalized layout, not pixel precision.
+  Stage 2 "Quality Annealing"     — CONTINUE the Stage-1 adapter on PIXEL-PERFECT
+                                     synthetic data (STAGE2_DATASETS) -> watertight precision.
+
+Both stages: resumable (Hub checkpoints + resume), FINISHED markers, best-on-eval.
 """
 import os
 
@@ -16,7 +18,7 @@ from transformers import (
 )
 from transformers.trainer_utils import get_last_checkpoint
 from trl import SFTTrainer, SFTConfig
-from peft import LoraConfig
+from peft import LoraConfig, PeftModel
 
 from . import config, hub_utils
 from .data import get_sft_datasets
@@ -31,23 +33,7 @@ class ConsoleLogger(TrainerCallback):
         print(f"  step {state.global_step:>6} | " + " | ".join(parts), flush=True)
 
 
-def main():
-    hub_utils.hf_login()
-    config.banner("SFT (Stages 1+2)")
-
-    if hub_utils.is_finished(config.REPO_SFT):
-        print(f"[sft] {config.REPO_SFT} already FINISHED — skipping.")
-        return
-    hub_utils.ensure_repo(config.REPO_SFT)
-
-    use_gpu = torch.cuda.is_available()
-    train_ds, eval_ds = get_sft_datasets()
-    print(f"[sft] train={len(train_ds)}  eval={len(eval_ds) if eval_ds else 0}")
-
-    px = ({"min_pixels": 256 * 28 * 28, "max_pixels": 1280 * 28 * 28} if use_gpu
-          else {"min_pixels": 64 * 28 * 28, "max_pixels": 256 * 28 * 28})
-    processor = AutoProcessor.from_pretrained(config.MODEL_ID, **px)
-
+def _load_base(use_gpu):
     mk = {"torch_dtype": torch.bfloat16 if use_gpu else torch.float32}
     if use_gpu:
         try:
@@ -56,18 +42,55 @@ def main():
             print("[sft] using flash_attention_2")
         except Exception:
             print("[sft] flash-attn not installed; default attention")
-    model = Qwen2_5_VLForConditionalGeneration.from_pretrained(config.MODEL_ID, **mk)
+    return Qwen2_5_VLForConditionalGeneration.from_pretrained(config.MODEL_ID, **mk)
 
-    peft_config = LoraConfig(
-        r=config.LORA_R, lora_alpha=config.LORA_ALPHA,
-        target_modules=config.LORA_TARGETS, lora_dropout=config.LORA_DROPOUT,
-        bias="none", task_type="CAUSAL_LM",
-    )
+
+def main():
+    hub_utils.hf_login()
+    stage = config.SFT_STAGE
+    if stage == 1:
+        datasets, repo, out_dir, epochs, prev = (
+            config.STAGE1_DATASETS, config.REPO_SFT1, config.OUTPUT_DIR_SFT1,
+            config.NUM_EPOCHS_SFT1, None)
+        label = "SFT Stage 1 — Structural Grounding"
+    else:
+        datasets, repo, out_dir, epochs, prev = (
+            config.STAGE2_DATASETS, config.REPO_SFT, config.OUTPUT_DIR_SFT,
+            config.NUM_EPOCHS_SFT2, config.REPO_SFT1)
+        label = "SFT Stage 2 — Quality Annealing"
+
+    config.banner(label)
+    print(f"[sft] stage={stage} datasets={datasets} repo={repo} epochs={epochs} prev={prev}")
+
+    if hub_utils.is_finished(repo):
+        print(f"[sft] {repo} already FINISHED — skipping.")
+        return
+    hub_utils.ensure_repo(repo)
+
+    use_gpu = torch.cuda.is_available()
+    train_ds, eval_ds = get_sft_datasets(datasets)
+    print(f"[sft] train={len(train_ds)}  eval={len(eval_ds) if eval_ds else 0}")
+
+    px = ({"min_pixels": 256 * 28 * 28, "max_pixels": 1280 * 28 * 28} if use_gpu
+          else {"min_pixels": 64 * 28 * 28, "max_pixels": 256 * 28 * 28})
+    processor = AutoProcessor.from_pretrained(config.MODEL_ID, **px)
+
+    base = _load_base(use_gpu)
+    if prev is None:
+        model = base
+        peft_config = LoraConfig(
+            r=config.LORA_R, lora_alpha=config.LORA_ALPHA,
+            target_modules=config.LORA_TARGETS, lora_dropout=config.LORA_DROPOUT,
+            bias="none", task_type="CAUSAL_LM")
+    else:
+        print(f"[sft] continuing Stage-1 adapter {prev}")
+        model = PeftModel.from_pretrained(base, prev, is_trainable=True)
+        peft_config = None
 
     has_eval = eval_ds is not None
     args = SFTConfig(
-        output_dir=config.OUTPUT_DIR_SFT,
-        num_train_epochs=config.NUM_EPOCHS_SFT,
+        output_dir=out_dir,
+        num_train_epochs=epochs,
         per_device_train_batch_size=config.BATCH_SIZE_SFT,
         gradient_accumulation_steps=config.GRAD_ACCUM_SFT,
         learning_rate=config.LR_SFT,
@@ -85,11 +108,8 @@ def main():
         max_length=config.MAX_LEN_SFT,
         remove_unused_columns=False,
         dataset_kwargs={"skip_prepare_dataset": True},
-        push_to_hub=True,
-        hub_model_id=config.REPO_SFT,
-        hub_strategy="all_checkpoints",
-        hub_private_repo=config.PRIVATE_REPOS,
-        report_to="none",
+        push_to_hub=True, hub_model_id=repo, hub_strategy="all_checkpoints",
+        hub_private_repo=config.PRIVATE_REPOS, report_to="none",
     )
 
     trainer = SFTTrainer(
@@ -99,21 +119,19 @@ def main():
         callbacks=[ConsoleLogger()],
     )
 
-    # ── resume ──
-    hub_utils.pull_latest_checkpoint(config.REPO_SFT, config.OUTPUT_DIR_SFT)
-    last = get_last_checkpoint(config.OUTPUT_DIR_SFT) if os.path.isdir(config.OUTPUT_DIR_SFT) else None
+    hub_utils.pull_latest_checkpoint(repo, out_dir)
+    last = get_last_checkpoint(out_dir) if os.path.isdir(out_dir) else None
     print(f"[sft] resume_from_checkpoint = {last}")
     trainer.train(resume_from_checkpoint=last)
 
-    # ── finalize (model is the best checkpoint when has_eval) ──
-    trainer.save_model(config.OUTPUT_DIR_SFT)
+    trainer.save_model(out_dir)
     try:
-        trainer.push_to_hub(commit_message="final SFT adapter")
+        trainer.push_to_hub(commit_message=f"final SFT stage {stage} adapter")
     except Exception as e:
         print(f"[sft] trainer.push_to_hub failed ({e}); manual upload")
-        hub_utils.upload_folder(config.REPO_SFT, config.OUTPUT_DIR_SFT)
-    hub_utils.mark_finished(config.REPO_SFT)
-    print(f"[sft] DONE -> https://huggingface.co/{config.REPO_SFT}")
+        hub_utils.upload_folder(repo, out_dir)
+    hub_utils.mark_finished(repo)
+    print(f"[sft] stage {stage} DONE -> https://huggingface.co/{repo}")
 
 
 if __name__ == "__main__":

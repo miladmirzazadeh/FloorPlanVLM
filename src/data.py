@@ -304,10 +304,11 @@ def _load_one(name, want_records):
     return recs, anns
 
 
-def get_sft_datasets():
-    """Build + harmonize + mix all configured datasets; persist annotations; split."""
+def get_sft_datasets(dataset_names=None):
+    """Build + harmonize + mix the given datasets (default config.DATASETS); split."""
+    names = dataset_names if dataset_names is not None else config.DATASETS
     all_records, all_anns = [], []
-    for name in config.DATASETS:
+    for name in names:
         try:
             recs, anns = _load_one(name, want_records=True)
             for a in anns:
@@ -325,19 +326,20 @@ def get_sft_datasets():
 
     _write_annotations(all_anns)
     ds = Dataset.from_list(all_records).shuffle(seed=42)
-    print(f"[data] combined SFT dataset: {len(ds)} samples from {config.DATASETS}")
+    print(f"[data] combined SFT dataset: {len(ds)} samples from {names}")
     if config.EVAL_RATIO > 0 and len(ds) >= 40:
         split = ds.train_test_split(test_size=config.EVAL_RATIO, seed=42)
         return split["train"], split["test"]
     return ds, None
 
 
-def ensure_annotations():
-    """GRPO path: rebuild combined annotations.json if missing (fresh pod)."""
+def ensure_annotations(dataset_names=None):
+    """GRPO path: rebuild annotations.json if missing (fresh pod)."""
     if os.path.exists(config.ANN_PATH):
         return
+    names = dataset_names if dataset_names is not None else config.DATASETS
     all_anns = []
-    for name in config.DATASETS:
+    for name in names:
         try:
             _, anns = _load_one(name, want_records=False)
             for a in anns:
@@ -350,7 +352,7 @@ def ensure_annotations():
 
 def build_grpo_dataset(ann_path, max_samples):
     """Prompt-only dataset (+ images + json_gt for the reward) for GRPO."""
-    ensure_annotations()
+    ensure_annotations(config.GRPO_DATASETS)
     with open(ann_path) as f:
         anns = json.load(f)
     if not anns:

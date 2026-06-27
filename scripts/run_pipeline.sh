@@ -32,10 +32,11 @@ run_stage () {
 }
 
 echo "[pipeline] start @ $(date)"
-run_stage sft  python -m src.train_sft
+run_stage sft1 env SFT_STAGE=1 python -m src.train_sft   # structural grounding (diverse real)
+run_stage sft2 env SFT_STAGE=2 python -m src.train_sft   # quality annealing (pixel-perfect synthetic)
 
 if [ "${RUN_GRPO:-true}" = "true" ] || [ "${RUN_GRPO:-1}" = "1" ]; then
-  run_stage grpo python -m src.train_grpo
+  run_stage grpo python -m src.train_grpo                 # GRPO geometric alignment
 else
   echo "[pipeline] RUN_GRPO disabled — stopping after SFT"
 fi
