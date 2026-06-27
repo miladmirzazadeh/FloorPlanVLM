@@ -1,17 +1,21 @@
 #!/usr/bin/env bash
-# FAST pod-side test: minimal deps -> FAITHFUL community inference on samples/ -> zip
-# results -> (optionally) upload the zip to HF so you can STOP THE POD IMMEDIATELY and
-# download the results later from anywhere. No HF login needed (base + adapter public).
+# FAST pod-side test: minimal deps -> run the community model 3 ways (sft / grpo / full)
+# on samples/ -> zip results -> (optionally) upload the zip to HF so you can STOP THE POD
+# IMMEDIATELY and download later. No HF login needed (base + adapters are public).
 #
-#   bash scripts/quick_eval.sh                 # community GRPO model (default)
-#   bash scripts/quick_eval.sh <ADAPTER>       # your own model, e.g. miladmirza/floorplan-walls-grpo
+#   bash scripts/quick_eval.sh                 # runs modes: sft grpo full
+#   MODES="full" bash scripts/quick_eval.sh    # just the correct stacked model
+#   IMAGES=cubi_samples bash scripts/quick_eval.sh
 #
-# Total pod time ~5-10 min (deps + 7.5GB model download + inference).
+# Why 3 modes: the GRPO LoRA was trained ON TOP of the SFT LoRA, but the card loads GRPO
+# on bare Qwen (drops SFT). 'full' = base+SFT(merged)+GRPO is the correct final model;
+# 'grpo' reproduces the broken card path; 'sft' shows the stage-1/2 baseline.
+# Total pod time ~15-20 min (deps + 7.5GB download + 3 passes).
 set -euo pipefail
 cd "$(dirname "$0")/.."
-ADAPTER="${1:-mudasir13cs/qwen25-vl-3b-floorplan-grpo}"
+MODES="${MODES:-sft grpo full}"
 
-# keep caches on the big volume (avoid container-disk quota)
+# keep caches on the big volume (avoid container-disk quota) + xet off (adapters are xet-backed)
 export HF_HOME="${HF_HOME:-$(pwd)/.hf_cache}"
 export HF_HUB_DISABLE_XET=1
 mkdir -p "$HF_HOME"
@@ -19,14 +23,14 @@ mkdir -p "$HF_HOME"
 echo "[quick_eval] installing minimal inference deps..."
 pip install -q transformers peft accelerate pillow huggingface_hub
 
-echo "[quick_eval] running FAITHFUL community inference (adapter=$ADAPTER)..."
-# infer_community.py = exact upstream snippet (their prompt + processor max_pixels=1280*28*28
-# + plain greedy). Apples-to-apples test of the pretrained adapter.
-python scripts/infer_community.py --images "${IMAGES:-samples}" --out eval_results --adapter "$ADAPTER"
+for m in $MODES; do
+  echo "[quick_eval] ===== mode=$m ====="
+  python scripts/infer_community.py --images "${IMAGES:-samples}" --out "eval_results_$m" --mode "$m"
+done
 
 echo "[quick_eval] zipping results..."
 rm -f eval_results.zip
-( cd eval_results && zip -rq ../eval_results.zip . )
+zip -rq eval_results.zip eval_results_* 2>/dev/null || true
 echo "[quick_eval] -> eval_results.zip ($(du -h eval_results.zip | cut -f1))"
 
 # Best path to 'stop pod immediately': push the small zip to HF, download later.
