@@ -3,9 +3,14 @@ _reference/
 
 # Data & training artifacts
 cubicasa_data/
+msd_data/
+synth_data/
+s3d_data/
 outputs/
+eval_results/
 *.zip
 wandb/
+# (test_images/ is intentionally tracked so it ships to the pod)
 
 # Orchestration runtime state
 logs/
