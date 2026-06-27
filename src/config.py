@@ -111,10 +111,13 @@ SYNTH_TOPO_MIN_JUNCTION = _f("SYNTH_TOPO_MIN_JUNCTION", 0.8)
 
 # ── Data shaping ──────────────────────────────────────────────────────────────
 # Image resolution fed to the vision encoder. Coords are normalized to longest-edge
-# 1024 (paper §4.3), so cap the encoder at ~1024² px to match the coordinate space —
-# and keep SFT == GRPO == infer/eval identical (avoids train/RL resolution mismatch).
+# 1024 (paper §4.3); cap the encoder near that to match the coordinate space and keep
+# SFT == GRPO == infer/eval identical (avoids train/RL resolution mismatch).
+# Use 1280*28*28 (=1,003,520), the Qwen patch-grid–aligned value used by upstream
+# floorplan-vlm-training — NOT 1024*1024, which isn't a multiple of 28**2, so Qwen's
+# smart-resize lands off the patch grid the model was trained on.
 IMG_MIN_PIXELS = _i("IMG_MIN_PIXELS", 256 * 28 * 28)
-IMG_MAX_PIXELS = _i("IMG_MAX_PIXELS", 1024 * 1024)
+IMG_MAX_PIXELS = _i("IMG_MAX_PIXELS", 1280 * 28 * 28)
 
 MAX_JSON_CHARS = _i("MAX_JSON_CHARS", 10000)
 MAX_SAMPLES = _opt_i("MAX_SAMPLES", None)  # None = all ~5k plans
