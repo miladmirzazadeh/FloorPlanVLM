@@ -60,7 +60,7 @@ def main():
 
     use_gpu = torch.cuda.is_available()
     processor = AutoProcessor.from_pretrained(
-        config.MODEL_ID, min_pixels=256 * 28 * 28, max_pixels=768 * 28 * 28
+        config.MODEL_ID, min_pixels=config.IMG_MIN_PIXELS, max_pixels=config.IMG_MAX_PIXELS
     )
     dataset = build_grpo_dataset(config.ANN_PATH, config.GRPO_MAX_SAMPLES)
     model = _load_sft_merged(use_gpu)

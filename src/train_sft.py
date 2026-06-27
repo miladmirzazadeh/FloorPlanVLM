@@ -71,7 +71,7 @@ def main():
     train_ds, eval_ds = get_sft_datasets(datasets)
     print(f"[sft] train={len(train_ds)}  eval={len(eval_ds) if eval_ds else 0}")
 
-    px = ({"min_pixels": 256 * 28 * 28, "max_pixels": 1280 * 28 * 28} if use_gpu
+    px = ({"min_pixels": config.IMG_MIN_PIXELS, "max_pixels": config.IMG_MAX_PIXELS} if use_gpu
           else {"min_pixels": 64 * 28 * 28, "max_pixels": 256 * 28 * 28})
     processor = AutoProcessor.from_pretrained(config.MODEL_ID, **px)
 

@@ -110,6 +110,12 @@ SYNTH_TOPO_FILTER = _b("SYNTH_TOPO_FILTER", True)
 SYNTH_TOPO_MIN_JUNCTION = _f("SYNTH_TOPO_MIN_JUNCTION", 0.8)
 
 # ── Data shaping ──────────────────────────────────────────────────────────────
+# Image resolution fed to the vision encoder. Coords are normalized to longest-edge
+# 1024 (paper §4.3), so cap the encoder at ~1024² px to match the coordinate space —
+# and keep SFT == GRPO == infer/eval identical (avoids train/RL resolution mismatch).
+IMG_MIN_PIXELS = _i("IMG_MIN_PIXELS", 256 * 28 * 28)
+IMG_MAX_PIXELS = _i("IMG_MAX_PIXELS", 1024 * 1024)
+
 MAX_JSON_CHARS = _i("MAX_JSON_CHARS", 10000)
 MAX_SAMPLES = _opt_i("MAX_SAMPLES", None)  # None = all ~5k plans
 EVAL_RATIO = _f("EVAL_RATIO", 0.03)        # held-out split for best-model tracking

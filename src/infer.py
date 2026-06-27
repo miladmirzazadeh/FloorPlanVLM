@@ -22,7 +22,7 @@ def run(image_path, adapter=None):
     adapter = adapter or config.REPO_GRPO
     print(f"[infer] base={config.MODEL_ID}  adapter={adapter}")
     proc = AutoProcessor.from_pretrained(
-        config.MODEL_ID, min_pixels=256 * 28 * 28, max_pixels=1280 * 28 * 28
+        config.MODEL_ID, min_pixels=config.IMG_MIN_PIXELS, max_pixels=config.IMG_MAX_PIXELS
     )
     model = Qwen2_5_VLForConditionalGeneration.from_pretrained(
         config.MODEL_ID, torch_dtype="auto", device_map="auto"
