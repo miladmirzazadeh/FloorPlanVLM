@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
-# FAST pod-side test: minimal deps -> batch-infer test_images/ -> zip results ->
-# (optionally) upload the zip to HF so you can STOP THE POD IMMEDIATELY and download
-# the results later from anywhere.
+# FAST pod-side test: minimal deps -> FAITHFUL community inference on samples/ -> zip
+# results -> (optionally) upload the zip to HF so you can STOP THE POD IMMEDIATELY and
+# download the results later from anywhere. No HF login needed (base + adapter public).
 #
 #   bash scripts/quick_eval.sh                 # community GRPO model (default)
 #   bash scripts/quick_eval.sh <ADAPTER>       # your own model, e.g. miladmirza/floorplan-walls-grpo
@@ -17,10 +17,12 @@ export HF_HUB_DISABLE_XET=1
 mkdir -p "$HF_HOME"
 
 echo "[quick_eval] installing minimal inference deps..."
-pip install -q transformers peft accelerate pillow numpy shapely huggingface_hub
+pip install -q transformers peft accelerate pillow huggingface_hub
 
-echo "[quick_eval] running batch inference (adapter=$ADAPTER)..."
-python -m src.batch_infer --images "${IMAGES:-samples}" --out eval_results --adapter "$ADAPTER"
+echo "[quick_eval] running FAITHFUL community inference (adapter=$ADAPTER)..."
+# infer_community.py = exact upstream snippet (their prompt + processor max_pixels=1280*28*28
+# + plain greedy). Apples-to-apples test of the pretrained adapter.
+python scripts/infer_community.py --images "${IMAGES:-samples}" --out eval_results --adapter "$ADAPTER"
 
 echo "[quick_eval] zipping results..."
 rm -f eval_results.zip
