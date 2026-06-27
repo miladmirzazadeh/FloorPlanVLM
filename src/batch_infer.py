@@ -29,23 +29,9 @@ from peft import PeftModel
 from . import config
 from .prompts import SYSTEM_PROMPT, USER_PROMPT
 from .geometry import wall_polyline
+from .rewards import extract_json   # robust (salvages truncated/looping output)
 
 EXTS = (".png", ".jpg", ".jpeg", ".webp", ".bmp")
-
-
-def _extract_json(text):
-    text = (text or "").strip()
-    try:
-        return json.loads(text)
-    except Exception:
-        pass
-    m = re.search(r"\{[\s\S]*\}", text)
-    if m:
-        try:
-            return json.loads(m.group())
-        except Exception:
-            pass
-    return None
 
 
 def main():
@@ -55,6 +41,9 @@ def main():
     ap.add_argument("--adapter", default="mudasir13cs/qwen25-vl-3b-floorplan-grpo",
                     help="HF repo or local path; 'base' for no adapter")
     ap.add_argument("--max-new-tokens", type=int, default=3072)
+    ap.add_argument("--repetition-penalty", type=float, default=1.1,
+                    help="soft logit penalty on repeats; 1.1 breaks the greedy loop without "
+                         "banning the legitimately-repeated JSON key tokens")
     a = ap.parse_args()
 
     os.makedirs(a.out, exist_ok=True)
@@ -85,9 +74,11 @@ def main():
             inputs = proc(text=[text], images=[img], return_tensors="pt", padding=True).to(model.device)
             t0 = time.time()
             with torch.no_grad():
-                out = model.generate(**inputs, max_new_tokens=a.max_new_tokens, do_sample=False)
+                out = model.generate(
+                    **inputs, max_new_tokens=a.max_new_tokens, do_sample=False,
+                    repetition_penalty=a.repetition_penalty)
             gen = proc.batch_decode(out[:, inputs.input_ids.shape[1]:], skip_special_tokens=True)[0]
-            jd = _extract_json(gen)
+            jd = extract_json(gen)
             nwalls = len(jd.get("walls", [])) if jd else 0
             dt = time.time() - t0
 

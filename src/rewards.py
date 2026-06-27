@@ -33,7 +33,41 @@ def extract_json(text):
             return json.loads(m.group())
         except Exception:
             pass
-    return None
+    return _salvage_walls(text)
+
+
+def _salvage_walls(text):
+    """Recover walls from truncated/over-long output by brace-matching each complete
+    wall object (handles the case where generation hit the token cap mid-JSON)."""
+    i = text.find('"walls"')
+    if i < 0:
+        return None
+    i = text.find("[", i)
+    if i < 0:
+        return None
+    walls, j, n = [], i + 1, len(text)
+    while j < n:
+        while j < n and text[j] not in "{]":
+            j += 1
+        if j >= n or text[j] == "]":
+            break
+        depth, k = 0, j
+        while k < n:
+            if text[k] == "{":
+                depth += 1
+            elif text[k] == "}":
+                depth -= 1
+                if depth == 0:
+                    break
+            k += 1
+        if k >= n:  # object truncated -> stop
+            break
+        try:
+            walls.append(json.loads(text[j:k + 1]))
+        except Exception:
+            pass
+        j = k + 1
+    return {"walls": walls} if walls else None
 
 
 def walls_to_polygon(walls):
