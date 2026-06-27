@@ -101,8 +101,15 @@ def main():
         print(f"[infer] no images under {a.images}/")
         sys.exit(1)
 
-    # processor straight from the SFT repo -> exact training min/max_pixels + chat template
-    processor = AutoProcessor.from_pretrained(a.sft_adapter)
+    # processor from the SFT repo -> exact training min/max_pixels + chat template.
+    # Fall back to base Qwen with the training-script's pixel budget if the adapter repo
+    # is missing image-processor files (so a pod run never dies on processor load).
+    try:
+        processor = AutoProcessor.from_pretrained(a.sft_adapter)
+    except Exception as e:
+        print(f"[infer] processor from {a.sft_adapter} failed ({e}); using base + training pixels")
+        processor = AutoProcessor.from_pretrained(
+            BASE, min_pixels=256 * 28 * 28, max_pixels=1280 * 28 * 28)
     model = build_model(a.mode, a.sft_adapter, a.grpo_adapter)
     model.eval()
     dev = next(model.parameters()).device
