@@ -15,7 +15,8 @@ single malformed completion can never crash a training step.
 import json
 import re
 
-from .geometry import walls_union
+from . import config
+from .geometry import walls_union, region_iou
 
 
 def extract_json(text):
@@ -98,6 +99,13 @@ def floorplan_reward(completions, **kwargs):
         r_ext = poly_iou(walls_to_polygon(pred.get("walls", [])),
                          walls_to_polygon(gt.get("walls", [])))
 
+        if config.WALLS_ONLY:
+            # walls-only: reward correct outer boundary + correct space partition
+            # (region topology = closure + separation), no room labels needed.
+            r_region = region_iou(pred.get("walls", []), gt.get("walls", []))
+            rewards.append(float(0.1 * min(r_val, 1.0) + 0.45 * r_ext + 0.45 * r_region))
+            continue
+
         # alpha gate (Eq. 8)
         if r_ext < 0.3:
             alpha = 0.1
@@ -112,8 +120,8 @@ def floorplan_reward(completions, **kwargs):
         if pr and gr:
             pl = {r.get("label", "") for r in pr}
             gl = {r.get("label", "") for r in gr}
-            total = len(pl | gl)
-            r_int = len(pl & gl) / total if total > 0 else 0.0
+            tot = len(pl | gl)
+            r_int = len(pl & gl) / tot if tot > 0 else 0.0
 
         rewards.append(float(0.1 * min(r_val, 1.0) + 0.5 * r_ext + alpha * 0.4 * r_int))
     return rewards

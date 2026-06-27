@@ -16,7 +16,7 @@ matches the real arc (a semicircle is a real semicircle, not a parabola).
 """
 import numpy as np
 from shapely.geometry import LineString
-from shapely.ops import unary_union
+from shapely.ops import unary_union, polygonize
 
 CURVE_EPS = 1e-3
 
@@ -80,6 +80,59 @@ def wall_to_polygon(wall):
     line = LineString(wall_polyline(wall))
     t = max(wall.get("thickness", 10), 1)
     return line.buffer(t / 2.0, cap_style=2)
+
+
+def poly_iou(a, b):
+    if a is None or b is None:
+        return 0.0
+    try:
+        if not a.is_valid:
+            a = a.buffer(0)
+        if not b.is_valid:
+            b = b.buffer(0)
+        inter = a.intersection(b).area
+        uni = a.union(b).area
+        return inter / uni if uni > 0 else 0.0
+    except Exception:
+        return 0.0
+
+
+def wall_faces(walls):
+    """Closed regions ('rooms' as geometry) formed by polygonizing the wall network.
+    Hanging/unclosed walls produce no face -> this is how topology gets scored."""
+    lines = []
+    for w in walls:
+        try:
+            lines.append(LineString(wall_polyline(w)))
+        except Exception:
+            pass
+    if len(lines) < 3:
+        return []
+    try:
+        return [p for p in polygonize(unary_union(lines)) if p.area > 1.0]
+    except Exception:
+        return []
+
+
+def region_iou(pred_walls, gt_walls, thr=0.5):
+    """Mean IoU of matched wall-enclosed regions (label-free topology score):
+    rewards walls that CLOSE and partition space like the ground truth."""
+    P, G = wall_faces(pred_walls), wall_faces(gt_walls)
+    if not G:
+        return 0.0
+    used, ious = set(), []
+    for gp in G:
+        best, bj = -1.0, -1
+        for j, pp in enumerate(P):
+            if j in used:
+                continue
+            iou = poly_iou(gp, pp)
+            if iou > best:
+                best, bj = iou, j
+        if bj >= 0 and best >= thr:
+            used.add(bj)
+            ious.append(best)
+    return float(np.mean(ious)) if ious else 0.0
 
 
 def walls_union(walls):
