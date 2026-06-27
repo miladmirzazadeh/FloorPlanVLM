@@ -1,25 +1,28 @@
-"""Faithful inference for the community floorplan model — with CORRECT adapter stacking.
+"""Inference for the community floorplan model.
 
-The community model is TWO LoRA adapters, trained as a curriculum:
-  * SFT  : mudasir13cs/qwen25-vl-3b-floorplan-sft   (LoRA on base Qwen)
-  * GRPO : mudasir13cs/qwen25-vl-3b-floorplan-grpo  (a NEW LoRA trained ON TOP of the
-           SFT model — train_floorplan_grpo.py: `model = SFT_MODEL_ID`)
+Two LoRA adapters exist:
+  * SFT  : mudasir13cs/qwen25-vl-3b-floorplan-sft
+  * GRPO : mudasir13cs/qwen25-vl-3b-floorplan-grpo
 
-GOTCHA: the GRPO adapter_config.json declares base = plain Qwen, and the model card's
-snippet loads ONLY the GRPO adapter on bare Qwen. That DROPS the entire SFT phase, so a
-GRPO delta lands on a model that never learned the task -> degenerate / infinite-wall
-output. The correct stack is:  base Qwen -> SFT (merged in) -> GRPO on top.
+EMPIRICAL FINDING (don't repeat my mistake): I first assumed GRPO was trained on top of
+SFT and that you must stack them (--mode full). The data refutes that:
+  * --mode grpo  (base + GRPO)            -> coherent real JSON, then repetition loops
+  * --mode full  (base + SFT-merged+GRPO) -> COMPLETE GIBBERISH (rare-token salad)
+If GRPO sat on SFT, stacking would FIX it and grpo-only would be broken — we see the
+reverse. So mudasir's GRPO was trained on PLAIN Qwen (matching its adapter_config
+base=Qwen); merging SFT underneath shifts the weights out from under the GRPO delta and
+corrupts the model. => correct loading is base + GRPO (the model card's way).
 
-We also load the processor FROM the SFT repo, so min/max_pixels and the chat template are
-exactly what the model trained with (no guessing).
+Bottom line: this checkpoint is undertrained (49% token acc, 5K imgs, 1234 steps). Loaded
+correctly it loops; loaded any other way it's garbage. Kept here only for the record.
 
-Modes (one run each; quick_eval.sh runs all three for an apples-to-apples comparison):
-  --mode full   base + SFT(merged) + GRPO     <- correct final model  (default)
-  --mode sft    base + SFT                     <- what stage-1/2 alone produces
-  --mode grpo   base + GRPO only              <- reproduces the broken card snippet
+Modes:
+  --mode grpo   base + GRPO only            <- correct loading per the card  (default)
+  --mode sft    base + SFT only             <- what stage-1/2 alone produces
+  --mode full   base + SFT(merged) + GRPO   <- DO NOT USE: corrupts the model (see above)
 
 Run on the pod (deps: transformers, peft, torch, pillow; HF_HUB_DISABLE_XET=1):
-    python scripts/infer_community.py --images samples --out eval_results_full --mode full
+    python scripts/infer_community.py --images samples --out eval_results_grpo --mode grpo
 
 Outputs per image: <name>.json (parsed + raw) and <name>_overlay.png.
 """
@@ -88,7 +91,7 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--images", default="samples")
     ap.add_argument("--out", default="eval_results_full")
-    ap.add_argument("--mode", choices=["full", "sft", "grpo"], default="full")
+    ap.add_argument("--mode", choices=["full", "sft", "grpo"], default="grpo")
     ap.add_argument("--sft-adapter", default=SFT_ADAPTER)
     ap.add_argument("--grpo-adapter", default=GRPO_ADAPTER)
     ap.add_argument("--max-new-tokens", type=int, default=4096)
