@@ -152,8 +152,10 @@ def convert(entities):
 
 def build_archcad_records(archcad_dir, max_samples=None, want_records=False):
     files = sorted(glob.glob(os.path.join(archcad_dir, "json", "*.json")))
+    if not files:                                   # robust to HF layout: find entity jsons anywhere
+        files = sorted(glob.glob(os.path.join(archcad_dir, "**", "*.json"), recursive=True))
     if not files:
-        print(f"[archcad] no json under {archcad_dir}/json — set ARCHCAD_DIR.")
+        print(f"[archcad] no json found under {archcad_dir} — set ARCHCAD_DIR.")
         return [], []
     img_dir = os.path.join(archcad_dir, "rendered")
     os.makedirs(img_dir, exist_ok=True)
