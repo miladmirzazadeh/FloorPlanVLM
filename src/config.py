@@ -56,10 +56,11 @@ def _derive_repo(stage):
 REPO_SFT = _derive_repo("sft")   # the one and only output adapter
 
 # ── Datasets ──────────────────────────────────────────────────────────────────
-# Single combined SFT corpus. All four converters emit the SAME canonical raw walls
-# (start/end px + thickness + openings), which the shared pipeline normalizes, orders,
-# sorts, and encodes identically — so the model sees one consistent target format.
-DATASETS = [d.strip() for d in _s("DATASETS", "cubicasa,synth,msd,archcad").split(",") if d.strip()]
+# Single combined SFT corpus. All converters emit the SAME canonical raw walls
+# (start/end px + thickness + curvature + openings), which the shared pipeline
+# normalizes, orders, sorts, and encodes identically — one consistent target format.
+# archcad deferred until its format is provided; add it back to the list when ready.
+DATASETS = [d.strip() for d in _s("DATASETS", "cubicasa,synth,msd").split(",") if d.strip()]
 
 # ── Paths (persistent volume on RunPod is /workspace) ─────────────────────────
 DATA_DIR = _s("DATA_DIR", "./cubicasa_data")
@@ -84,11 +85,13 @@ CUBICASA_MAX_SAMPLES = _opt_i("CUBICASA_MAX_SAMPLES", None)
 # ── Data format (the part that decides success) ───────────────────────────────
 GRID = _i("GRID", 1000)                       # normalize ALL coords to [0, GRID]
 PAD_TO_SQUARE = _b("PAD_TO_SQUARE", True)     # pad (never distort) to square before scaling
-ABBREVIATE = _b("ABBREVIATE", True)           # short keys (cl/th/op) + minified JSON
+ABBREVIATE = _b("ABBREVIATE", True)           # short keys (cl/th/cv/op) + minified JSON
 NEST_OPENINGS = _b("NEST_OPENINGS", True)     # openings live inside their wall object
 COUNT_ANCHOR = _b("COUNT_ANCHOR", True)       # prepend {"n":N,...} as lightweight CoT
 SORT_WALLS = _b("SORT_WALLS", True)           # exterior clockwise, then interior TL->BR
 ORDER_ENDPOINTS = _b("ORDER_ENDPOINTS", True) # cl always x1<=x2 (tie: y1<=y2)
+CURVATURE = _b("CURVATURE", True)             # emit signed 'cv' for curved walls (0=straight)
+CURVE_EPS = _f("CURVE_EPS", 0.02)             # |cv| below this is treated as straight (cv omitted)
 NEG_SAMPLE_FRAC = _f("NEG_SAMPLE_FRAC", 0.04) # 3-5% empty/garbage -> {"n":0,"walls":[]}
 
 # image token budget for the vision encoder (keep modest so image+text fit MAX_SEQ_LEN)
@@ -112,8 +115,8 @@ GRAD_ACCUM_SFT = _i("GRAD_ACCUM_SFT", 8)
 LR_SFT = _f("LR_SFT", 1e-4)
 SAVE_STEPS_SFT = _i("SAVE_STEPS_SFT", 200)
 # Cap the training context. Minified targets keep JSON short; capping image+prompt+
-# target to 8192 (or 4096) slashes VRAM and speeds training without losing precision.
-MAX_SEQ_LEN = _i("MAX_SEQ_LEN", 8192)
+# target slashes VRAM and speeds training without losing precision.
+MAX_SEQ_LEN = _i("MAX_SEQ_LEN", 4096)
 
 # ── Smoke test ────────────────────────────────────────────────────────────────
 SMOKE_TEST = _b("SMOKE_TEST", False)

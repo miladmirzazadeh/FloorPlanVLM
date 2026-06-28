@@ -26,12 +26,16 @@ def encode(walls):
     """Canonical walls (from normalize.canonicalize) -> minified target string."""
     ab = config.ABBREVIATE
     k_cl, k_th, k_op = ("cl", "th", "op") if ab else ("centerline", "thickness", "openings")
+    k_cv = "cv" if ab else "curvature"
     k_t, k_c, k_w = ("t", "c", "w") if ab else ("type", "center", "width")
     k_n = "n" if ab else "total_walls"
 
     objs = []
     for i, w in enumerate(walls, 1):
         o = {"id": i, k_cl: [int(v) for v in w["cl"]], k_th: int(w["th"])}
+        cv = float(w.get("cv", 0) or 0)
+        if config.CURVATURE and abs(cv) >= config.CURVE_EPS:
+            o[k_cv] = round(cv, 3)                       # curved walls only
         if config.NEST_OPENINGS and w.get("op"):
             o[k_op] = [{k_t: op["t"], k_c: int(op["c"]), k_w: int(op["w"])} for op in w["op"]]
         objs.append(o)
@@ -74,6 +78,7 @@ def decode(text):
         if not (isinstance(cl, list) and len(cl) == 4):
             continue
         th = w.get("th", w.get("thickness", 1))
+        cv = w.get("cv", w.get("curvature", 0)) or 0
         ops = []
         for op in (w.get("op", w.get("openings")) or []):
             ops.append({
@@ -81,7 +86,8 @@ def decode(text):
                 "c": op.get("c", op.get("center", 0)),
                 "w": op.get("w", op.get("width", 0)),
             })
-        out.append({"cl": [int(round(v)) for v in cl], "th": int(round(th)), "op": ops})
+        out.append({"cl": [int(round(v)) for v in cl], "th": int(round(th)),
+                    "cv": float(cv), "op": ops})
     return out
 
 
@@ -90,15 +96,17 @@ def schema_doc():
     g = config.GRID
     if config.ABBREVIATE:
         body = (
-            '{"n":N,"walls":[{"id":1,"cl":[x1,y1,x2,y2],"th":T,'
+            '{"n":N,"walls":[{"id":1,"cl":[x1,y1,x2,y2],"th":T,"cv":0,'
             '"op":[{"t":"door"|"window","c":C,"w":W}]}]}'
         )
         keys = ("n=number of walls; id=1..N; cl=centerline [x1,y1,x2,y2]; th=thickness; "
-                "op=openings (omit if none); t=type; c=offset along cl from the first point; w=width.")
+                "cv=curvature (0 for straight walls, a small signed value for curved walls; "
+                "omit when 0); op=openings (omit if none); t=type; "
+                "c=offset along cl from the first point; w=width.")
     else:
         body = ('{"total_walls":N,"walls":[{"id":1,"centerline":[x1,y1,x2,y2],"thickness":T,'
-                '"openings":[{"type":"door"|"window","center":C,"width":W}]}]}')
-        keys = "centerline=[x1,y1,x2,y2]; openings omitted if none."
+                '"curvature":0,"openings":[{"type":"door"|"window","center":C,"width":W}]}]}')
+        keys = "centerline=[x1,y1,x2,y2]; curvature 0 unless curved; openings omitted if none."
     return (
         f"Output ONLY one line of minified JSON (no spaces, no newlines) with this schema:\n{body}\n"
         f"{keys}\n"

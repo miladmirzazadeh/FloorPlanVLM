@@ -35,14 +35,49 @@ def _clamp(v, g):
     return max(0, min(g, int(round(v))))
 
 
-def _order(cl, ops):
-    """Enforce x1<=x2 (tie y1<=y2); if flipped, mirror opening offsets (c -> L-c)."""
+def _order(cl, ops, cv):
+    """Enforce x1<=x2 (tie y1<=y2). On flip: mirror opening offsets (c->L-c) AND
+    negate curvature (an arc bulging one way A->B bulges the other way B->A)."""
     x1, y1, x2, y2 = cl
     if (x1, y1) <= (x2, y2):
-        return cl, ops
+        return cl, ops, cv
     L = math.hypot(x2 - x1, y2 - y1)
     ops = [{"t": o["t"], "c": int(round(L - o["c"])), "w": o["w"]} for o in ops]
-    return [x2, y2, x1, y1], ops
+    return [x2, y2, x1, y1], ops, -cv
+
+
+def arc_polyline(cl, cv, n=24):
+    """Points tracing the wall: straight if |cv|~0, else a circular arc with signed
+    sagitta-ratio curvature cv (h = cv*L/2). Pure math (no shapely) for rendering."""
+    ax, ay, bx, by = cl
+    dx, dy = bx - ax, by - ay
+    L = math.hypot(dx, dy)
+    if L < 1e-6 or abs(cv) < 1e-3:
+        return [(ax, ay), (bx, by)]
+    h = cv * L / 2.0
+    ux, uy = dx / L, dy / L
+    nx, ny = -uy, ux
+    mx, my = (ax + bx) / 2.0, (ay + by) / 2.0
+    R = (L * L / 4.0 + h * h) / (2.0 * abs(h))
+    c = -math.copysign(1.0, h) * math.sqrt(max(R * R - L * L / 4.0, 0.0))
+    ox, oy = mx + c * nx, my + c * ny
+    th_a = math.atan2(ay - oy, ax - ox)
+    th_b = math.atan2(by - oy, bx - ox)
+    px, py = mx + h * nx, my + h * ny
+    th_p = math.atan2(py - oy, px - ox)
+
+    def wrap(x):
+        while x <= -math.pi:
+            x += 2 * math.pi
+        while x > math.pi:
+            x -= 2 * math.pi
+        return x
+
+    d = wrap(th_b - th_a) or math.pi
+    if not (0.0 <= wrap(th_p - th_a) / d <= 1.0):
+        d -= math.copysign(2 * math.pi, d)
+    return [(ox + R * math.cos(th_a + d * (i / n)), oy + R * math.sin(th_a + d * (i / n)))
+            for i in range(n + 1)]
 
 
 def _sort(walls, grid):
@@ -92,6 +127,7 @@ def canonicalize(raw_walls, img_w, img_h, grid=None, order=None, sort=None):
         if cl[0] == cl[2] and cl[1] == cl[3]:
             continue                                   # zero-length after rounding
         th = max(1, int(round(max(w.get("thickness", 1), 1) * s)))
+        cv = float(w.get("curvature", 0) or 0)   # sagitta ratio: scale-invariant, no *s
         ops = []
         for op in (w.get("openings") or []):
             t = str(op.get("type", "door")).lower()
@@ -99,7 +135,7 @@ def canonicalize(raw_walls, img_w, img_h, grid=None, order=None, sort=None):
                         "c": _clamp(op.get("center", 0) * s, grid),
                         "w": max(1, int(round(op.get("width", 0) * s)))})
         if order:
-            cl, ops = _order(cl, ops)
-        walls.append({"cl": cl, "th": th, "op": ops})
+            cl, ops, cv = _order(cl, ops, cv)
+        walls.append({"cl": cl, "th": th, "cv": cv, "op": ops})
 
     return _sort(walls, grid) if sort else walls

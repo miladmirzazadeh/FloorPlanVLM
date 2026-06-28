@@ -19,7 +19,7 @@ import numpy as np
 from PIL import Image, ImageDraw
 
 from . import config
-from .normalize import pad_to_square
+from .normalize import pad_to_square, arc_polyline
 from .schema import decode
 
 
@@ -33,18 +33,24 @@ def ink_mask(square_img, thresh=190, dilate=2):
     return out
 
 
+def _pts(w, f):
+    """Arc-aware polyline of a wall in padded-square pixels."""
+    return [(x * f, y * f) for (x, y) in arc_polyline(w["cl"], w.get("cv", 0), n=24)]
+
+
 def align_frac(walls, mask, side, grid):
     H, W = mask.shape
     f = side / float(grid)
     hit = tot = 0
     for w in walls:
-        x1, y1, x2, y2 = [c * f for c in w["cl"]]
-        steps = max(2, int(max(abs(x2 - x1), abs(y2 - y1))))
-        for t in np.linspace(0, 1, steps):
-            xi, yi = int(round(x1 + (x2 - x1) * t)), int(round(y1 + (y2 - y1) * t))
-            tot += 1
-            if 0 <= yi < H and 0 <= xi < W and mask[yi, xi]:
-                hit += 1
+        pts = _pts(w, f)
+        for (xa, ya), (xb, yb) in zip(pts, pts[1:]):
+            steps = max(2, int(max(abs(xb - xa), abs(yb - ya))))
+            for t in np.linspace(0, 1, steps):
+                xi, yi = int(round(xa + (xb - xa) * t)), int(round(ya + (yb - ya) * t))
+                tot += 1
+                if 0 <= yi < H and 0 <= xi < W and mask[yi, xi]:
+                    hit += 1
     return hit / tot if tot else 0.0
 
 
@@ -53,9 +59,9 @@ def render(square_img, walls, side, grid):
     d = ImageDraw.Draw(im)
     f = side / float(grid)
     for w in walls:
-        x1, y1, x2, y2 = [c * f for c in w["cl"]]
-        d.line([(x1, y1), (x2, y2)], fill=(255, 0, 0), width=max(2, int(w["th"] * f)))
-        d.line([(x1, y1), (x2, y2)], fill=(0, 120, 255), width=1)  # centerline
+        pts = _pts(w, f)
+        d.line(pts, fill=(255, 0, 0), width=max(2, int(w["th"] * f)))
+        d.line(pts, fill=(0, 120, 255), width=1)  # centerline
     return im
 
 
