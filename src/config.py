@@ -149,6 +149,10 @@ SAVE_STEPS_SFT = _i("SAVE_STEPS_SFT", 200)
 # Hard cap on optimizer steps (0 = use NUM_EPOCHS_SFT). Set this to time-box a run:
 # wall-time ≈ MAX_STEPS × GRAD_ACCUM_SFT × per-sample-seconds. Checkpoints every SAVE_STEPS.
 MAX_STEPS = _i("MAX_STEPS", 0)
+# Warm-start a LATER run from an existing adapter (HF repo or local path) instead of a fresh
+# LoRA — for continual training on more data. Use a FRESH OUTPUT_DIR_SFT so it doesn't resume
+# the old run's optimizer state, and train on the FULL corpus (old+new) to avoid forgetting.
+CONTINUE_FROM = _s("CONTINUE_FROM", "")
 # Cap the training context. Minified targets keep JSON short; capping image+prompt+
 # target slashes VRAM and speeds training without losing precision.
 MAX_SEQ_LEN = _i("MAX_SEQ_LEN", 4096)

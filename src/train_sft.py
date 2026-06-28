@@ -15,7 +15,7 @@ import torch
 from PIL import Image
 from transformers import AutoProcessor, TrainingArguments, Trainer
 from transformers.trainer_utils import get_last_checkpoint
-from peft import LoraConfig, get_peft_model
+from peft import LoraConfig, get_peft_model, PeftModel
 
 from . import config, prompts
 from .augment import augment
@@ -83,9 +83,14 @@ def main():
     print(f"[sft] dtype={config.TORCH_DTYPE}")
     model.config.use_cache = False
     model.gradient_checkpointing_enable(gradient_checkpointing_kwargs={"use_reentrant": False})
-    model = get_peft_model(model, LoraConfig(
-        r=config.LORA_R, lora_alpha=config.LORA_ALPHA, lora_dropout=config.LORA_DROPOUT,
-        target_modules=config.LORA_TARGETS, bias="none", task_type="CAUSAL_LM"))
+    if config.CONTINUE_FROM:                      # warm-start a later run from an existing adapter
+        print(f"[sft] warm-start: continuing adapter {config.CONTINUE_FROM}")
+        model = PeftModel.from_pretrained(model, config.CONTINUE_FROM, is_trainable=True,
+                                          token=config.HF_TOKEN or None)
+    else:
+        model = get_peft_model(model, LoraConfig(
+            r=config.LORA_R, lora_alpha=config.LORA_ALPHA, lora_dropout=config.LORA_DROPOUT,
+            target_modules=config.LORA_TARGETS, bias="none", task_type="CAUSAL_LM"))
     model.print_trainable_parameters()
 
     push = bool(config.HF_USER and config.HF_TOKEN)
