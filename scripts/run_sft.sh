@@ -50,8 +50,18 @@ except Exception as e:
     print("[resume] hub pull skipped:", e)
 PY
 
+echo "[run_sft] === prefetch base model (single process; prevents the DDP concurrent-download race) ==="
+python - <<'PY' || true
+from src import config
+from huggingface_hub import snapshot_download
+print("[prefetch]", config.MODEL_ID, flush=True)
+snapshot_download(config.MODEL_ID, token=(config.HF_TOKEN or None),
+                  allow_patterns=["*.safetensors", "*.json", "*.txt", "*.jinja", "tokenizer*", "*.model"])
+print("[prefetch] done", flush=True)
+PY
+
 echo "[run_sft] === train ==="
-# Build + gate ran single-process above. Train uses ALL visible GPUs via DDP (torchrun);
+# Build + gate + prefetch ran single-process above. Train uses ALL visible GPUs via DDP (torchrun);
 # falls back to plain python on 1 GPU.
 NGPU=$(python -c "import torch;print(torch.cuda.device_count())" 2>/dev/null || echo 1)
 echo "[run_sft] visible GPUs: ${NGPU}"
