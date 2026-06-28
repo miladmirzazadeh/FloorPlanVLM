@@ -25,3 +25,5 @@ __pycache__/
 *.pyo
 .ipynb_checkpoints/
 .DS_Store
+archcad/
+*.RARExtractor*/
