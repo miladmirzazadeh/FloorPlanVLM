@@ -1,137 +1,121 @@
-"""Supervised fine-tuning — paper-faithful 2-stage curriculum (§4.4).
+"""Supervised fine-tune Qwen3-VL-8B (LoRA) on the built {image, target} JSONL.
 
-Selected by SFT_STAGE (run_pipeline.sh runs 1 then 2):
-  Stage 1 "Structural Grounding"  — new LoRA on diverse REAL data (STAGE1_DATASETS)
-                                     -> generalized layout, not pixel precision.
-  Stage 2 "Quality Annealing"     — CONTINUE the Stage-1 adapter on PIXEL-PERFECT
-                                     synthetic data (STAGE2_DATASETS) -> watertight precision.
+- one frozen system prompt + image -> minified [0,1000] walls JSON (the target)
+- loss is computed ONLY on the target tokens (system/user/image tokens are masked)
+- training context capped at config.MAX_SEQ_LEN (image + prompt + target)
+- checkpoints autosave to OUTPUT_DIR_SFT and (if HF_USER+HF_TOKEN set) push to the Hub
+  each save; training auto-resumes from the latest local checkpoint.
 
-Both stages: resumable (Hub checkpoints + resume), FINISHED markers, best-on-eval.
+    python -m src.train_sft        # reads built/train.jsonl, built/val.jsonl
 """
 import os
+import json
 
 import torch
-from transformers import (
-    Qwen2_5_VLForConditionalGeneration,
-    AutoProcessor,
-    TrainerCallback,
-)
+from PIL import Image
+from transformers import AutoProcessor, TrainingArguments, Trainer
 from transformers.trainer_utils import get_last_checkpoint
-from trl import SFTTrainer, SFTConfig
-from peft import LoraConfig, PeftModel
+from peft import LoraConfig, get_peft_model
 
-from . import config, hub_utils
-from .data import get_sft_datasets
+from . import config, prompts
 
-
-class ConsoleLogger(TrainerCallback):
-    def on_log(self, args, state, control, logs=None, **kw):
-        if not logs:
-            return
-        parts = [f"{k}={v:.4f}" if isinstance(v, float) else f"{k}={v}"
-                 for k, v in logs.items() if k != "epoch"]
-        print(f"  step {state.global_step:>6} | " + " | ".join(parts), flush=True)
+try:                                            # prefer the exact class when present
+    from transformers import Qwen3VLForConditionalGeneration as VLM
+except Exception:                               # fall back to the generic resolver
+    from transformers import AutoModelForImageTextToText as VLM
 
 
-def _load_base(use_gpu):
-    mk = {"torch_dtype": torch.bfloat16 if use_gpu else torch.float32}
-    if use_gpu:
-        try:
-            import flash_attn  # noqa: F401
-            mk["attn_implementation"] = "flash_attention_2"
-            print("[sft] using flash_attention_2")
-        except Exception:
-            print("[sft] flash-attn not installed; default attention")
-    return Qwen2_5_VLForConditionalGeneration.from_pretrained(config.MODEL_ID, **mk)
+def _rows(path):
+    return [json.loads(l) for l in open(path) if l.strip()]
+
+
+def _messages(target):
+    return [
+        {"role": "system", "content": [{"type": "text", "text": prompts.SYSTEM_PROMPT}]},
+        {"role": "user", "content": [{"type": "image"}, {"type": "text", "text": prompts.USER_PROMPT}]},
+        {"role": "assistant", "content": [{"type": "text", "text": target}]},
+    ]
+
+
+def make_collator(processor):
+    tok = processor.tokenizer
+    tok.padding_side = "right"
+
+    def collate(examples):
+        texts, images = [], []
+        for ex in examples:
+            images.append(Image.open(ex["image"]).convert("RGB"))
+            texts.append(processor.apply_chat_template(
+                _messages(ex["target"]), tokenize=False, add_generation_prompt=False))
+        batch = processor(text=texts, images=images, return_tensors="pt",
+                          padding=True, truncation=True, max_length=config.MAX_SEQ_LEN)
+        labels = batch["input_ids"].clone()
+        labels[labels == tok.pad_token_id] = -100
+        # mask the prompt+image span per row -> loss only on the assistant target.
+        for row, ex in enumerate(examples):
+            ptext = processor.apply_chat_template(
+                _messages(ex["target"])[:-1], tokenize=False, add_generation_prompt=True)
+            plen = processor(text=[ptext], images=[images[row]], return_tensors="pt",
+                             truncation=True, max_length=config.MAX_SEQ_LEN)["input_ids"].shape[1]
+            labels[row, :plen] = -100
+        batch["labels"] = labels
+        return batch
+
+    return collate
 
 
 def main():
-    hub_utils.hf_login()
-    stage = config.SFT_STAGE
-    if stage == 1:
-        datasets, repo, out_dir, epochs, prev = (
-            config.STAGE1_DATASETS, config.REPO_SFT1, config.OUTPUT_DIR_SFT1,
-            config.NUM_EPOCHS_SFT1, None)
-        label = "SFT Stage 1 — Structural Grounding"
-    else:
-        datasets, repo, out_dir, epochs, prev = (
-            config.STAGE2_DATASETS, config.REPO_SFT, config.OUTPUT_DIR_SFT,
-            config.NUM_EPOCHS_SFT2, config.REPO_SFT1)
-        label = "SFT Stage 2 — Quality Annealing"
+    config.banner("SFT  Qwen3-VL-8B")
+    train = _rows(os.path.join(config.BUILT_DATA, "train.jsonl"))
+    print(f"[sft] train={len(train)} samples  max_seq_len={config.MAX_SEQ_LEN}")
 
-    config.banner(label)
-    print(f"[sft] stage={stage} datasets={datasets} repo={repo} epochs={epochs} prev={prev}")
+    processor = AutoProcessor.from_pretrained(
+        config.MODEL_ID, min_pixels=config.IMG_MIN_PIXELS, max_pixels=config.IMG_MAX_PIXELS)
+    model = VLM.from_pretrained(config.MODEL_ID, torch_dtype=torch.bfloat16)
+    model.config.use_cache = False
+    model.gradient_checkpointing_enable(gradient_checkpointing_kwargs={"use_reentrant": False})
+    model = get_peft_model(model, LoraConfig(
+        r=config.LORA_R, lora_alpha=config.LORA_ALPHA, lora_dropout=config.LORA_DROPOUT,
+        target_modules=config.LORA_TARGETS, bias="none", task_type="CAUSAL_LM"))
+    model.print_trainable_parameters()
 
-    if hub_utils.is_finished(repo):
-        print(f"[sft] {repo} already FINISHED — skipping.")
-        return
-    hub_utils.ensure_repo(repo)
-
-    use_gpu = torch.cuda.is_available()
-    train_ds, eval_ds = get_sft_datasets(datasets)
-    print(f"[sft] train={len(train_ds)}  eval={len(eval_ds) if eval_ds else 0}")
-
-    px = ({"min_pixels": config.IMG_MIN_PIXELS, "max_pixels": config.IMG_MAX_PIXELS} if use_gpu
-          else {"min_pixels": 64 * 28 * 28, "max_pixels": 256 * 28 * 28})
-    processor = AutoProcessor.from_pretrained(config.MODEL_ID, **px)
-
-    base = _load_base(use_gpu)
-    if prev is None:
-        model = base
-        peft_config = LoraConfig(
-            r=config.LORA_R, lora_alpha=config.LORA_ALPHA,
-            target_modules=config.LORA_TARGETS, lora_dropout=config.LORA_DROPOUT,
-            bias="none", task_type="CAUSAL_LM")
-    else:
-        print(f"[sft] continuing Stage-1 adapter {prev}")
-        model = PeftModel.from_pretrained(base, prev, is_trainable=True)
-        peft_config = None
-
-    has_eval = eval_ds is not None
-    args = SFTConfig(
-        output_dir=out_dir,
-        num_train_epochs=epochs,
+    push = bool(config.HF_USER and config.HF_TOKEN)
+    args = TrainingArguments(
+        output_dir=config.OUTPUT_DIR_SFT,
+        num_train_epochs=config.NUM_EPOCHS_SFT,
         per_device_train_batch_size=config.BATCH_SIZE_SFT,
         gradient_accumulation_steps=config.GRAD_ACCUM_SFT,
         learning_rate=config.LR_SFT,
-        warmup_steps=20 if use_gpu else 1,
+        bf16=True,
+        logging_steps=10,
+        save_steps=config.SAVE_STEPS_SFT,
+        save_total_limit=2,
+        warmup_ratio=0.03,
         lr_scheduler_type="cosine",
-        bf16=use_gpu, fp16=False,
         gradient_checkpointing=True,
-        gradient_checkpointing_kwargs={"use_reentrant": False},
-        logging_steps=5, logging_first_step=True, disable_tqdm=True,
-        save_strategy="steps", save_steps=config.SAVE_STEPS_SFT, save_total_limit=3,
-        eval_strategy="steps" if has_eval else "no",
-        eval_steps=config.SAVE_STEPS_SFT if has_eval else None,
-        load_best_model_at_end=has_eval,
-        metric_for_best_model="eval_loss", greater_is_better=False,
-        max_length=config.MAX_LEN_SFT,
-        remove_unused_columns=False,
-        dataset_kwargs={"skip_prepare_dataset": True},
-        push_to_hub=True, hub_model_id=repo, hub_strategy="all_checkpoints",
-        hub_private_repo=config.PRIVATE_REPOS, report_to="none",
+        report_to="none",
+        remove_unused_columns=False,            # keep our raw dict columns for the collator
+        dataloader_num_workers=2,
+        push_to_hub=push,
+        hub_model_id=config.REPO_SFT if push else None,
+        hub_strategy="all_checkpoints" if push else "every_save",
+        hub_private_repo=config.PRIVATE_REPOS,
+        hub_token=config.HF_TOKEN or None,
     )
 
-    trainer = SFTTrainer(
-        model=model, args=args,
-        train_dataset=train_ds, eval_dataset=eval_ds,
-        peft_config=peft_config, processing_class=processor,
-        callbacks=[ConsoleLogger()],
-    )
+    trainer = Trainer(model=model, args=args, train_dataset=train,
+                      data_collator=make_collator(processor))
 
-    hub_utils.pull_latest_checkpoint(repo, out_dir)
-    last = get_last_checkpoint(out_dir) if os.path.isdir(out_dir) else None
-    print(f"[sft] resume_from_checkpoint = {last}")
-    trainer.train(resume_from_checkpoint=last)
+    resume = get_last_checkpoint(config.OUTPUT_DIR_SFT) if os.path.isdir(config.OUTPUT_DIR_SFT) else None
+    if resume:
+        print(f"[sft] resuming from {resume}")
+    trainer.train(resume_from_checkpoint=resume)
 
-    trainer.save_model(out_dir)
-    try:
-        trainer.push_to_hub(commit_message=f"final SFT stage {stage} adapter")
-    except Exception as e:
-        print(f"[sft] trainer.push_to_hub failed ({e}); manual upload")
-        hub_utils.upload_folder(repo, out_dir)
-    hub_utils.mark_finished(repo)
-    print(f"[sft] stage {stage} DONE -> https://huggingface.co/{repo}")
+    trainer.save_model(config.OUTPUT_DIR_SFT)
+    processor.save_pretrained(config.OUTPUT_DIR_SFT)
+    if push:
+        trainer.push_to_hub()
+    print(f"[sft] done -> {config.OUTPUT_DIR_SFT}" + (f"  (+ Hub {config.REPO_SFT})" if push else ""))
 
 
 if __name__ == "__main__":

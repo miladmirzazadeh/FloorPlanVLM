@@ -82,6 +82,18 @@ ARCHCAD_MAX_SAMPLES = _opt_i("ARCHCAD_MAX_SAMPLES", None)
 
 CUBICASA_MAX_SAMPLES = _opt_i("CUBICASA_MAX_SAMPLES", None)
 
+# ── Back-compat shims for the REUSED dataset parsers (data.py / data_synth.py /
+#    data_msd.py).  We keep their validated wall-extraction; build_data.py only
+#    re-encodes their output through the new [0,GRID] schema, so these are just the
+#    knobs that parsing code still reads. Not part of the new SFT format itself. ──
+WALLS_ONLY = False                                   # parsers branch on this; new schema is wall-centric anyway
+FIT_CURVES = _b("FIT_CURVES", True)                  # keep real arc labels (synth) -> cv field
+MAX_JSON_CHARS = _i("MAX_JSON_CHARS", 100000)        # skip pathological mega-plans during parse
+ANN_PATH = os.path.join(DATA_DIR, "annotations.json")
+GRPO_DATASETS = []                                   # unused (no GRPO) — present so imports don't break
+MSD_RENDER_DIR = _s("MSD_RENDER_DIR", os.path.join(MSD_DIR, "rendered"))
+SYNTH_RENDER_DIR = _s("SYNTH_RENDER_DIR", os.path.join(SYNTH_DIR, "rendered"))
+
 # ── Data format (the part that decides success) ───────────────────────────────
 GRID = _i("GRID", 1000)                       # normalize ALL coords to [0, GRID]
 PAD_TO_SQUARE = _b("PAD_TO_SQUARE", True)     # pad (never distort) to square before scaling
@@ -92,7 +104,8 @@ SORT_WALLS = _b("SORT_WALLS", True)           # exterior clockwise, then interio
 ORDER_ENDPOINTS = _b("ORDER_ENDPOINTS", True) # cl always x1<=x2 (tie: y1<=y2)
 CURVATURE = _b("CURVATURE", True)             # emit signed 'cv' for curved walls (0=straight)
 CURVE_EPS = _f("CURVE_EPS", 0.02)             # |cv| below this is treated as straight (cv omitted)
-NEG_SAMPLE_FRAC = _f("NEG_SAMPLE_FRAC", 0.04) # 3-5% empty/garbage -> {"n":0,"walls":[]}
+NEG_SAMPLE_FRAC = _f("NEG_SAMPLE_FRAC", 0.0)  # 0=off (set 0.03-0.05 to add empty/garbage -> {"n":0,"walls":[]})
+AUGMENT = _b("AUGMENT", False)                # safe pixel-level aug (contrast/brightness/blur/scanlines); never geometric
 
 # image token budget for the vision encoder (keep modest so image+text fit MAX_SEQ_LEN)
 IMG_MIN_PIXELS = _i("IMG_MIN_PIXELS", 256 * 28 * 28)
