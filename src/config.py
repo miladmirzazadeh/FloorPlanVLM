@@ -63,7 +63,7 @@ REPO_SFT = _derive_repo("sft")   # the one and only output adapter
 #   binnies = BinniesHK prepared SFT set (replaces cubicasa); synth = floorplan_synthgen;
 #   msd = Modified Swiss Dwellings.  cubicasa still available as a token. archcad deferred
 #   (gated dataset — needs HF access grant before its converter can be written).
-DATASETS = [d.strip() for d in _s("DATASETS", "binnies,synth,msd,archcad").split(",") if d.strip()]
+DATASETS = [d.strip() for d in _s("DATASETS", "binnies,synth,archcad").split(",") if d.strip()]
 
 # ── Paths (persistent volume on RunPod is /workspace) ─────────────────────────
 DATA_DIR = _s("DATA_DIR", "./cubicasa_data")
