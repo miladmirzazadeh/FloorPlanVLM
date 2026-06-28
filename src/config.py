@@ -141,7 +141,7 @@ LORA_TARGETS = _s("LORA_TARGETS",
 TORCH_DTYPE = _s("TORCH_DTYPE", "bfloat16")
 
 # ── SFT ───────────────────────────────────────────────────────────────────────
-NUM_EPOCHS_SFT = _i("NUM_EPOCHS_SFT", 3)
+NUM_EPOCHS_SFT = _i("NUM_EPOCHS_SFT", 2)
 BATCH_SIZE_SFT = _i("BATCH_SIZE_SFT", 1)
 GRAD_ACCUM_SFT = _i("GRAD_ACCUM_SFT", 8)
 LR_SFT = _f("LR_SFT", 1e-4)
