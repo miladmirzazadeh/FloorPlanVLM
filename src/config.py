@@ -63,7 +63,7 @@ REPO_SFT = _derive_repo("sft")   # the one and only output adapter
 #   binnies = BinniesHK prepared SFT set (replaces cubicasa); synth = floorplan_synthgen;
 #   msd = Modified Swiss Dwellings.  cubicasa still available as a token. archcad deferred
 #   (gated dataset — needs HF access grant before its converter can be written).
-DATASETS = [d.strip() for d in _s("DATASETS", "binnies,synth,msd").split(",") if d.strip()]
+DATASETS = [d.strip() for d in _s("DATASETS", "binnies,synth,msd,archcad").split(",") if d.strip()]
 
 # ── Paths (persistent volume on RunPod is /workspace) ─────────────────────────
 DATA_DIR = _s("DATA_DIR", "./cubicasa_data")
@@ -79,8 +79,10 @@ SYNTH_MAX_SAMPLES = _opt_i("SYNTH_MAX_SAMPLES", None)
 SYNTH_TOPO_FILTER = _b("SYNTH_TOPO_FILTER", True)
 SYNTH_TOPO_MIN_JUNCTION = _f("SYNTH_TOPO_MIN_JUNCTION", 0.8)
 
-# ArchCAD — real CAD line-drawing floor plans. Point ARCHCAD_DIR at the unzipped set.
-ARCHCAD_DIR = _s("ARCHCAD_DIR", "./archcad_data")
+# ArchCAD — real CAD line-drawing plans (HF jackluoluo/ArchCAD, cc-by-nc). Needs only the
+# json/ folder under ARCHCAD_DIR (image is rendered from json). ~60% are non-plan sheets
+# (auto-skipped). If ARCHCAD_DIR/json is absent the source contributes 0 (build still runs).
+ARCHCAD_DIR = _s("ARCHCAD_DIR", "./archcad")
 ARCHCAD_MAX_SAMPLES = _opt_i("ARCHCAD_MAX_SAMPLES", None)
 
 CUBICASA_MAX_SAMPLES = _opt_i("CUBICASA_MAX_SAMPLES", None)
