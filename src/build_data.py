@@ -26,7 +26,11 @@ from .normalize import canonicalize
 def _annotations(name):
     """(image_path, json_annotation) per plan from the reused, validated parsers."""
     name = name.lower()
-    if name == "cubicasa":
+    if name in ("binnies", "binnieshk"):
+        from .data_binnies import build_binnies_records
+        _, anns = build_binnies_records(config.BUILT_DATA,
+                                        config.BINNIES_MAX_SAMPLES or config.MAX_SAMPLES, want_records=False)
+    elif name == "cubicasa":
         from .data import _build, download_and_extract
         _, anns = _build(download_and_extract(),
                          config.CUBICASA_MAX_SAMPLES or config.MAX_SAMPLES, want_records=False)
@@ -36,8 +40,11 @@ def _annotations(name):
     elif name in ("synth", "synth-floorseg", "synthfloorseg"):
         from .data_synth import build_synth_records
         _, anns = build_synth_records(config.SYNTH_DIR, config.SYNTH_MAX_SAMPLES, want_records=False)
+    elif name == "archcad":
+        from .data_archcad import build_archcad_records
+        _, anns = build_archcad_records(config.ARCHCAD_DIR, config.ARCHCAD_MAX_SAMPLES, want_records=False)
     else:
-        raise ValueError(f"unknown dataset '{name}' (cubicasa, msd, synth)")
+        raise ValueError(f"unknown dataset '{name}' (binnies, cubicasa, msd, synth, archcad)")
     return anns
 
 

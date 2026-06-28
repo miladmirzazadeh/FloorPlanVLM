@@ -56,11 +56,14 @@ def _derive_repo(stage):
 REPO_SFT = _derive_repo("sft")   # the one and only output adapter
 
 # ── Datasets ──────────────────────────────────────────────────────────────────
-# Single combined SFT corpus. All converters emit the SAME canonical raw walls
-# (start/end px + thickness + curvature + openings), which the shared pipeline
-# normalizes, orders, sorts, and encodes identically — one consistent target format.
-# archcad deferred until its format is provided; add it back to the list when ready.
-DATASETS = [d.strip() for d in _s("DATASETS", "cubicasa,synth,msd").split(",") if d.strip()]
+# Single combined SFT corpus. Every source emits the SAME canonical raw walls (px
+# start/end + thickness + curvature + openings); the shared pipeline normalizes, orders,
+# sorts, and encodes them identically — ONE consistent [0,GRID] target for all sources
+# (binnies, synth, msd all go through the same canonicalize+schema; synth included).
+#   binnies = BinniesHK prepared SFT set (replaces cubicasa); synth = floorplan_synthgen;
+#   msd = Modified Swiss Dwellings.  cubicasa still available as a token. archcad deferred
+#   (gated dataset — needs HF access grant before its converter can be written).
+DATASETS = [d.strip() for d in _s("DATASETS", "binnies,synth,msd").split(",") if d.strip()]
 
 # ── Paths (persistent volume on RunPod is /workspace) ─────────────────────────
 DATA_DIR = _s("DATA_DIR", "./cubicasa_data")
@@ -81,6 +84,10 @@ ARCHCAD_DIR = _s("ARCHCAD_DIR", "./archcad_data")
 ARCHCAD_MAX_SAMPLES = _opt_i("ARCHCAD_MAX_SAMPLES", None)
 
 CUBICASA_MAX_SAMPLES = _opt_i("CUBICASA_MAX_SAMPLES", None)
+
+# BinniesHK prepared SFT set (HF: BinniesHK-AI/floorplan-vlm-sft-dataset-flat) — replaces
+# cubicasa. ~4.9k rows, already in the FloorplanVLM schema; auto-downloaded by `datasets`.
+BINNIES_MAX_SAMPLES = _opt_i("BINNIES_MAX_SAMPLES", None)
 
 # ── Back-compat shims for the REUSED dataset parsers (data.py / data_synth.py /
 #    data_msd.py).  We keep their validated wall-extraction; build_data.py only
