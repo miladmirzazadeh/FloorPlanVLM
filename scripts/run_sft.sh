@@ -23,5 +23,14 @@ echo "[run_sft] === round-trip gate (sample; open a few overlays) ==="
 python -m src.validate_roundtrip --built built/train.jsonl --out rt_check --n 40 || true
 
 echo "[run_sft] === train ==="
-python -m src.train_sft
+# Build + gate ran single-process above. Train uses ALL visible GPUs via DDP (torchrun);
+# falls back to plain python on 1 GPU.
+NGPU=$(python -c "import torch;print(torch.cuda.device_count())" 2>/dev/null || echo 1)
+echo "[run_sft] visible GPUs: ${NGPU}"
+if [ "${NGPU:-1}" -gt 1 ]; then
+  echo "[run_sft] multi-GPU DDP: torchrun --nproc_per_node=${NGPU}"
+  torchrun --standalone --nproc_per_node="${NGPU}" -m src.train_sft
+else
+  python -m src.train_sft
+fi
 echo "[run_sft] DONE."

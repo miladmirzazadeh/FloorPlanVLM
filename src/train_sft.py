@@ -109,6 +109,7 @@ def main():
         warmup_ratio=0.03,
         lr_scheduler_type="cosine",
         gradient_checkpointing=True,
+        ddp_find_unused_parameters=False,       # LoRA: only adapter params get grads -> safe + faster under DDP
         report_to="none",
         remove_unused_columns=False,            # keep our raw dict columns for the collator
         dataloader_num_workers=2,
