@@ -18,6 +18,7 @@ from transformers.trainer_utils import get_last_checkpoint
 from peft import LoraConfig, get_peft_model
 
 from . import config, prompts
+from .augment import augment
 
 try:                                            # prefer the exact class when present
     from transformers import Qwen3VLForConditionalGeneration as VLM
@@ -48,7 +49,10 @@ def make_collator(processor):
     def collate(examples):
         texts, images = [], []
         for ex in examples:
-            images.append(Image.open(ex["image"]).convert("RGB"))
+            img = Image.open(ex["image"]).convert("RGB")
+            if config.AUGMENT:
+                img = augment(img)               # pixel-level only; preserves coords
+            images.append(img)
             texts.append(processor.apply_chat_template(
                 _messages(ex["target"]), tokenize=False, add_generation_prompt=False))
         batch = processor(text=texts, images=images, return_tensors="pt",
