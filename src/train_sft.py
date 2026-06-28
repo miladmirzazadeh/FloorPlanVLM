@@ -49,7 +49,10 @@ def make_collator(processor):
     def collate(examples):
         texts, images = [], []
         for ex in examples:
-            img = Image.open(ex["image"]).convert("RGB")
+            p = ex["image"]
+            if not os.path.isabs(p):                  # saved datasets use images/ relative to BUILT_DATA
+                p = os.path.join(config.BUILT_DATA, p)
+            img = Image.open(p).convert("RGB")
             if config.AUGMENT:
                 img = augment(img)               # pixel-level only; preserves coords
             images.append(img)

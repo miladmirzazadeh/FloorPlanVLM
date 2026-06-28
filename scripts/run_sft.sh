@@ -16,11 +16,16 @@ echo "[run_sft] installing deps..."
 pip install -q "transformers>=4.57" peft accelerate datasets pillow numpy shapely \
     opencv-python-headless huggingface_hub
 
-echo "[run_sft] === build dataset ==="
-python -m src.build_data
+BUILT="${BUILT_DATA:-built}"
+if [ "${SKIP_BUILD:-0}" = "1" ] && [ -f "$BUILT/train.jsonl" ]; then
+  echo "[run_sft] === SKIP_BUILD: reusing existing $BUILT/train.jsonl ==="
+else
+  echo "[run_sft] === build dataset ==="
+  python -m src.build_data
+fi
 
 echo "[run_sft] === round-trip gate (sample; open a few overlays) ==="
-python -m src.validate_roundtrip --built built/train.jsonl --out rt_check --n 40 || true
+python -m src.validate_roundtrip --built "$BUILT/train.jsonl" --out rt_check --n 40 || true
 
 echo "[run_sft] === resume check: pull latest Hub checkpoint if local volume is empty ==="
 # Single-process (before torchrun) so all ranks then find the checkpoint locally. Lets a
