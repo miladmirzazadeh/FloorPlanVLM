@@ -80,32 +80,22 @@ def arc_polyline(cl, cv, n=24):
             for i in range(n + 1)]
 
 
+def _mid(w):
+    return ((w["cl"][0] + w["cl"][2]) / 2.0, (w["cl"][1] + w["cl"][3]) / 2.0)
+
+
 def _sort(walls, grid):
-    """Exterior walls clockwise from the top, then interior walls top-left→bottom-right."""
-    if not walls:
-        return walls
-    xs = [c for w in walls for c in (w["cl"][0], w["cl"][2])]
-    ys = [c for w in walls for c in (w["cl"][1], w["cl"][3])]
-    minx, maxx, miny, maxy = min(xs), max(xs), min(ys), max(ys)
-    cx, cy = (minx + maxx) / 2.0, (miny + maxy) / 2.0
-    margin = 0.04 * grid
+    """Deterministic, identical-for-every-image READING ORDER: top-left wall first, then
+    left→right across each horizontal band, then the next band down. y is bucketed into rows
+    (band = 4% of grid) so walls at the same height are grouped left→right rather than split
+    by a one-pixel y difference. Robust on partial/non-rectangular plans (no exterior split)."""
+    band = max(1.0, 0.04 * grid)
 
-    def mid(w):
-        return ((w["cl"][0] + w["cl"][2]) / 2.0, (w["cl"][1] + w["cl"][3]) / 2.0)
+    def key(w):
+        x1, y1, x2, y2 = w["cl"]
+        return (int(min(y1, y2) // band), min(x1, x2), min(y1, y2), max(x1, x2), max(y1, y2))
 
-    def is_ext(w):
-        mx, my = mid(w)
-        return mx <= minx + margin or mx >= maxx - margin or my <= miny + margin or my >= maxy - margin
-
-    def cw(w):                                  # clockwise angle from 12 o'clock
-        mx, my = mid(w)
-        a = math.atan2(mx - cx, -(my - cy))
-        return a if a >= 0 else a + 2 * math.pi
-
-    ext = sorted([w for w in walls if is_ext(w)], key=cw)
-    int_ = sorted([w for w in walls if not is_ext(w)],
-                  key=lambda w: (min(w["cl"][1], w["cl"][3]), min(w["cl"][0], w["cl"][2])))
-    return ext + int_
+    return sorted(walls, key=key)            # full geometric key -> stable & input-order-independent
 
 
 def canonicalize(raw_walls, img_w, img_h, grid=None, order=None, sort=None, rooms=None):
@@ -149,9 +139,21 @@ def canonicalize(raw_walls, img_w, img_h, grid=None, order=None, sort=None, room
     out_rooms = []
     if rooms and config.ROOMS:
         id_map = {w["_src"]: i + 1 for i, w in enumerate(walls)}   # source id -> final wall id
+        final = {i + 1: w for i, w in enumerate(walls)}            # final id -> wall
         for r in (rooms or []):
-            refs = sorted({id_map[wid] for wid in (r.get("walls") or []) if wid in id_map})
+            refs = list({id_map[wid] for wid in (r.get("walls") or []) if wid in id_map})
             if len(refs) >= 3:                                     # a real enclosed room
+                # ORDER the border walls as a boundary walk: clockwise around the room centroid
+                # (FloorplanVLM Eq.5 wants an ORDERED sequence of wall ids, not a sorted set).
+                rcx = sum(_mid(final[i])[0] for i in refs) / len(refs)
+                rcy = sum(_mid(final[i])[1] for i in refs) / len(refs)
+
+                def _cw(i, rcx=rcx, rcy=rcy):
+                    mx, my = _mid(final[i])
+                    a = math.atan2(mx - rcx, -(my - rcy))
+                    return a if a >= 0 else a + 2 * math.pi
+
+                refs = sorted(refs, key=_cw)
                 out_rooms.append({"t": r.get("label") or r.get("room_type") or "room", "w": refs})
     for w in walls:
         w.pop("_src", None)

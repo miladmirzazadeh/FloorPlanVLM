@@ -1,16 +1,22 @@
 """ArchCAD (HF jackluoluo/ArchCAD, cc-by-nc) -> (image_path, json_annotation) records.
 
-Local layout: ARCHCAD_DIR/json/<uuid>.json  (we render the image from json; svg unused).
+Local layout: ARCHCAD_DIR/json/<uuid>.json  (+ optional ARCHCAD_DIR/png/<uuid>.png).
 json = {"entities":[{type:LINE|ARC|CIRCLE, start,end, center,radius,start_angle,end_angle,
-        line_width, semantic:<class>, ...}]}, coordinates Y-up.
+        line_width, semantic:<class>, ...}]}.
 
 CLASS MAP (verified): semantic 20 = WALLS (drawn as DOUBLE parallel lines); 100 = grid;
 6 = stairs; 19/1 = openings/symbols. ~60% of drawings have NO walls (detail/section sheets)
 -> skipped.
 
+IMAGE SOURCE (two modes; PNG preferred — config.ARCHCAD_USE_PNG, auto-on when png/ exists):
+  * PNG mode: use the OFFICIAL render ARCHCAD_DIR/png/<uuid>.png. VERIFIED that the json
+    coords ARE the png pixels (980x980, 1:1, Y-DOWN, no flip), so walls map directly with no
+    transform, and the image carries real CAD line weights / door swings / column grids.
+  * render mode (fallback): rasterize all entities (black on white) ourselves with a
+    Y-flip CAD->pixel transform — a thin-line sketch; used only when no png/ is present.
+
 Pipeline per drawing:
-  1. render ALL entities (black on white) -> the input image (realistic CAD line drawing,
-     grid/stairs/symbols become hard-negative distractors), with a CAD->pixel transform.
+  1. obtain the image (png or render) and the coordinate space the json walls live in.
   2. pair the semantic-20 double-lines into centerline + thickness (parallel + overlapping
      + small perpendicular gap). Skip drawings with < MIN_WALLS paired walls.
   3. emit raw walls {start,end,thickness,curvature,openings} in PIXEL space -> build_data
@@ -24,6 +30,8 @@ import math
 
 from PIL import Image, ImageDraw
 
+from . import config
+
 WALL_SEM = 20
 MIN_WALLS = 6                      # skip non-plan sheets
 RENDER_LONG_EDGE = 1024
@@ -35,13 +43,18 @@ def _dir(s, e):
     return (dx / L, dy / L, L) if L > 1e-9 else (0.0, 0.0, 0.0)
 
 
-def _pair_walls(segs, span, ang_tol=8.0, min_ov=0.25):
-    """Double-line LINE segments -> [(centerline_start, centerline_end, thickness)]."""
+def _pair_walls(segs, span, ang_tol=8.0, min_ov=0.25, return_edges=False):
+    """Double-line LINE segments -> [(centerline_start, centerline_end, thickness)].
+
+    return_edges=True also returns, per wall, the two ORIGINAL paired edge segments
+    [(seg_i, seg_j), ...] — used by the clean renderer to draw authentic hollow walls
+    while skipping every UNpaired sem-20 edge (so the rendered image == the labels)."""
     th_lo, th_hi = max(1.0, 0.002 * span), 0.08 * span
     n = len(segs)
     used = [False] * n
     dirs = [_dir(*s) for s in segs]
     walls = []
+    edges = []
     for i in range(n):
         if used[i] or dirs[i][2] < 1e-9:
             continue
@@ -78,7 +91,8 @@ def _pair_walls(segs, span, ang_tol=8.0, min_ov=0.25):
             ce = [si[0] + o1 * uix + h * nix, si[1] + o1 * uiy + h * niy]
             if math.hypot(ce[0] - cs[0], ce[1] - cs[1]) > 0.01 * span:
                 walls.append((cs, ce, perp))
-    return walls
+                edges.append((segs[i], segs[j]))
+    return (walls, edges) if return_edges else walls
 
 
 def _arc_pts(c, r, a0, a1, n=20):
@@ -150,6 +164,26 @@ def convert(entities):
     return img, walls
 
 
+def convert_png(entities, png_w, png_h):
+    """entities + official png size -> raw_walls in PNG-PIXEL space (json coords ARE png px).
+
+    No render, no transform: pairs the semantic-20 double-lines directly in png pixels.
+    Returns walls or None (too few walls)."""
+    segs = [(e["start"], e["end"]) for e in entities
+            if e.get("semantic") == WALL_SEM and e.get("type") == "LINE" and e.get("start")]
+    if len(segs) < MIN_WALLS:
+        return None
+    span = float(max(png_w, png_h))                  # the thickness band scales off the frame
+    walls_px = _pair_walls(segs, span)
+    if len(walls_px) < MIN_WALLS:
+        return None
+    walls = []
+    for cs, ce, th in walls_px:
+        walls.append({"start": [round(cs[0]), round(cs[1])], "end": [round(ce[0]), round(ce[1])],
+                      "thickness": max(1, round(th)), "curvature": 0, "openings": []})
+    return walls
+
+
 def build_archcad_records(archcad_dir, max_samples=None, want_records=False):
     files = sorted(glob.glob(os.path.join(archcad_dir, "json", "*.json")))
     if not files:                                   # robust to HF layout: find entity jsons anywhere
@@ -157,28 +191,53 @@ def build_archcad_records(archcad_dir, max_samples=None, want_records=False):
     if not files:
         print(f"[archcad] no json found under {archcad_dir} — set ARCHCAD_DIR.")
         return [], []
+
+    png_dir = os.path.join(archcad_dir, "png")
+    use_png = config.ARCHCAD_USE_PNG and os.path.isdir(png_dir)
     img_dir = os.path.join(archcad_dir, "rendered")
-    os.makedirs(img_dir, exist_ok=True)
-    print(f"[archcad] {len(files)} json to scan (rendering plans, skipping non-plan sheets)...", flush=True)
-    anns, kept, skipped = [], 0, 0
+    if use_png:
+        print(f"[archcad] {len(files)} json to scan — IMAGE: official png/ "
+              f"(json coords = png pixels, no render)...", flush=True)
+    else:
+        os.makedirs(img_dir, exist_ok=True)
+        print(f"[archcad] {len(files)} json to scan — IMAGE: rendering from json "
+              f"(no png/ dir found)...", flush=True)
+
+    anns, kept, skipped, no_png = [], 0, 0, 0
     for i, f in enumerate(files):
         if max_samples and kept >= max_samples:
             break
         if i and i % 2000 == 0:
             print(f"[archcad]   {i}/{len(files)} scanned ({kept} kept, {skipped} skipped)", flush=True)
         try:
-            ents = json.load(open(f))["entities"]
-            img, walls = convert(ents)
-            if img is None:
-                skipped += 1
-                continue
             name = os.path.splitext(os.path.basename(f))[0]
-            p = os.path.join(img_dir, f"{name}.png")
-            img.save(p)
+            if use_png:
+                p = os.path.join(png_dir, f"{name}.png")
+                if not os.path.exists(p):            # check png BEFORE loading json (fast skip)
+                    no_png += 1
+                    skipped += 1
+                    continue
+                ents = json.load(open(f))["entities"]
+                with Image.open(p) as im:            # header only — no full decode
+                    pw, ph = im.size
+                walls = convert_png(ents, pw, ph)
+                if walls is None:
+                    skipped += 1
+                    continue
+            else:
+                ents = json.load(open(f))["entities"]
+                img, walls = convert(ents)
+                if img is None:
+                    skipped += 1
+                    continue
+                p = os.path.join(img_dir, f"{name}.png")
+                img.save(p)
             anns.append({"image_path": os.path.abspath(p),
                          "json_annotation": json.dumps({"walls": walls}, separators=(",", ":"))})
             kept += 1
         except Exception:
             skipped += 1
-    print(f"[archcad] {kept} plans kept, {skipped} skipped (non-plan/too-few-walls) -> {img_dir}")
+    extra = f" ({no_png} missing png)" if no_png else ""
+    src = "official png" if use_png else f"rendered -> {img_dir}"
+    print(f"[archcad] {kept} plans kept, {skipped} skipped (non-plan/too-few-walls{extra}) — image: {src}")
     return [], anns

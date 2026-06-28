@@ -61,9 +61,12 @@ REPO_SFT = _derive_repo("sft")   # the one and only output adapter
 # sorts, and encodes them identically — ONE consistent [0,GRID] target for all sources
 # (binnies, synth, msd all go through the same canonicalize+schema; synth included).
 #   binnies = BinniesHK prepared SFT set (replaces cubicasa); synth = floorplan_synthgen;
-#   msd = Modified Swiss Dwellings.  cubicasa still available as a token. archcad deferred
-#   (gated dataset — needs HF access grant before its converter can be written).
-DATASETS = [d.strip() for d in _s("DATASETS", "binnies,synth,archcad").split(",") if d.strip()]
+#   msd = Modified Swiss Dwellings.  cubicasa still available as a token.
+# ARCHCAD DROPPED from the default corpus (2026-06): it has NO room/opening labels and our
+# double-line wall extraction is only ~0.59 recall, so it cannot meet the unified
+# walls+openings+rooms schema without a high-recall extractor. Its converter (data_archcad)
+# is kept for a future revisit; add "archcad" back to DATASETS only once that's built.
+DATASETS = [d.strip() for d in _s("DATASETS", "binnies,synth").split(",") if d.strip()]
 
 # ── Paths (persistent volume on RunPod is /workspace) ─────────────────────────
 DATA_DIR = _s("DATA_DIR", "./cubicasa_data")
@@ -86,6 +89,12 @@ SYNTH_TOPO_MIN_JUNCTION = _f("SYNTH_TOPO_MIN_JUNCTION", 0.8)
 # (auto-skipped). If ARCHCAD_DIR/json is absent the source contributes 0 (build still runs).
 ARCHCAD_DIR = _s("ARCHCAD_DIR", "./archcad")
 ARCHCAD_MAX_SAMPLES = _opt_i("ARCHCAD_MAX_SAMPLES", None)
+# Use the OFFICIAL ArchCAD PNG renders (ARCHCAD_DIR/png/<uuid>.png) instead of rendering the
+# image from json. VERIFIED: the json coords ARE the png pixels (980x980, 1:1, Y-down, no flip),
+# so walls align exactly AND the image is a realistic CAD drawing (true line weights, door
+# swings, column grids as hard negatives) — far closer to real plans than our line render.
+# Auto-on when ARCHCAD_DIR/png exists; falls back to the json render otherwise.
+ARCHCAD_USE_PNG = _b("ARCHCAD_USE_PNG", True)
 
 CUBICASA_MAX_SAMPLES = _opt_i("CUBICASA_MAX_SAMPLES", None)
 
