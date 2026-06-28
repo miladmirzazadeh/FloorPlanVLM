@@ -13,7 +13,7 @@ export TOKENIZERS_PARALLELISM="${TOKENIZERS_PARALLELISM:-false}"
 mkdir -p "$HF_HOME"
 
 echo "[run_sft] installing deps..."
-pip install -q "transformers>=4.57" peft accelerate pillow numpy shapely \
+pip install -q "transformers>=4.57" peft accelerate datasets pillow numpy shapely \
     opencv-python-headless huggingface_hub
 
 echo "[run_sft] === build dataset ==="

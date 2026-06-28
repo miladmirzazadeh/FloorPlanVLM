@@ -76,7 +76,9 @@ MSD_MAX_SAMPLES = _opt_i("MSD_MAX_SAMPLES", None)
 
 SYNTH_DIR = _s("SYNTH_DIR", "./synth_data")
 SYNTH_MAX_SAMPLES = _opt_i("SYNTH_MAX_SAMPLES", None)
-SYNTH_TOPO_FILTER = _b("SYNTH_TOPO_FILTER", True)
+# Off by default: the new floorplan_synthgen is 100% valid by construction, and topology_ok
+# false-negatives on valid rotated/curved plans. Re-enable only for the old Vitruev output.
+SYNTH_TOPO_FILTER = _b("SYNTH_TOPO_FILTER", False)
 SYNTH_TOPO_MIN_JUNCTION = _f("SYNTH_TOPO_MIN_JUNCTION", 0.8)
 
 # ArchCAD — real CAD line-drawing plans (HF jackluoluo/ArchCAD, cc-by-nc). Needs only the
@@ -144,6 +146,9 @@ BATCH_SIZE_SFT = _i("BATCH_SIZE_SFT", 1)
 GRAD_ACCUM_SFT = _i("GRAD_ACCUM_SFT", 8)
 LR_SFT = _f("LR_SFT", 1e-4)
 SAVE_STEPS_SFT = _i("SAVE_STEPS_SFT", 200)
+# Hard cap on optimizer steps (0 = use NUM_EPOCHS_SFT). Set this to time-box a run:
+# wall-time ≈ MAX_STEPS × GRAD_ACCUM_SFT × per-sample-seconds. Checkpoints every SAVE_STEPS.
+MAX_STEPS = _i("MAX_STEPS", 0)
 # Cap the training context. Minified targets keep JSON short; capping image+prompt+
 # target slashes VRAM and speeds training without losing precision.
 MAX_SEQ_LEN = _i("MAX_SEQ_LEN", 4096)

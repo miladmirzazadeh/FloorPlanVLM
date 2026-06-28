@@ -92,6 +92,7 @@ def main():
     args = TrainingArguments(
         output_dir=config.OUTPUT_DIR_SFT,
         num_train_epochs=config.NUM_EPOCHS_SFT,
+        max_steps=config.MAX_STEPS if config.MAX_STEPS > 0 else -1,
         per_device_train_batch_size=config.BATCH_SIZE_SFT,
         gradient_accumulation_steps=config.GRAD_ACCUM_SFT,
         learning_rate=config.LR_SFT,
