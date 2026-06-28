@@ -39,17 +39,23 @@ def _pts(w, f):
 
 
 def align_frac(walls, mask, side, grid):
+    """Fraction of centerline samples with ink within the wall's HALF-THICKNESS band.
+    CAD walls are drawn hollow (two parallel lines, white between), so a strict
+    centerline-on-ink check under-counts; searching ±thickness/2 finds the band lines."""
     H, W = mask.shape
     f = side / float(grid)
     hit = tot = 0
     for w in walls:
+        r = max(2, int(round(w.get("th", 4) * f / 2)) + 2)   # half-thickness band (+margin)
         pts = _pts(w, f)
         for (xa, ya), (xb, yb) in zip(pts, pts[1:]):
             steps = max(2, int(max(abs(xb - xa), abs(yb - ya))))
             for t in np.linspace(0, 1, steps):
                 xi, yi = int(round(xa + (xb - xa) * t)), int(round(ya + (yb - ya) * t))
                 tot += 1
-                if 0 <= yi < H and 0 <= xi < W and mask[yi, xi]:
+                ly, hy = max(0, yi - r), min(H, yi + r + 1)
+                lx, hx = max(0, xi - r), min(W, xi + r + 1)
+                if ly < hy and lx < hx and mask[ly:hy, lx:hx].any():
                     hit += 1
     return hit / tot if tot else 0.0
 
