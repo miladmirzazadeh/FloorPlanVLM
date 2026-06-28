@@ -56,10 +56,10 @@ def _encode(ann):
         jd = json.loads(ann["json_annotation"])
     except Exception:
         return None
-    walls = canonicalize(jd.get("walls", []), w, h)
+    walls, rooms = canonicalize(jd.get("walls", []), w, h, rooms=jd.get("rooms"))
     if not walls:
         return None
-    tgt = schema.encode(walls)
+    tgt = schema.encode(walls, rooms)
     # self-check: every target must decode to the same wall count
     if len(schema.decode(tgt)) != len(walls):
         return None

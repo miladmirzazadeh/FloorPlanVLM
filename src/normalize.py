@@ -108,8 +108,13 @@ def _sort(walls, grid):
     return ext + int_
 
 
-def canonicalize(raw_walls, img_w, img_h, grid=None, order=None, sort=None):
-    """RAW walls (px start/end/thickness/openings) -> canonical [0,grid] walls."""
+def canonicalize(raw_walls, img_w, img_h, grid=None, order=None, sort=None, rooms=None):
+    """RAW walls (+ optional rooms referencing border-wall ids) -> (walls, rooms).
+
+      walls = [{cl,th,cv,op}]  in [0,grid], ordered + sorted.
+      rooms = [{t, w:[wall ids]}]  FloorplanVLM-style: a room = its set of BORDER walls;
+              wall ids are remapped to the final sorted 1..N order (kept if >=3 survive).
+    """
     grid = config.GRID if grid is None else grid
     order = config.ORDER_ENDPOINTS if order is None else order
     sort = config.SORT_WALLS if sort is None else sort
@@ -117,7 +122,7 @@ def canonicalize(raw_walls, img_w, img_h, grid=None, order=None, sort=None):
     s = grid / float(side)
 
     walls = []
-    for w in raw_walls:
+    for idx, w in enumerate(raw_walls):
         st, en = w.get("start"), w.get("end")
         if not (isinstance(st, (list, tuple)) and isinstance(en, (list, tuple))
                 and len(st) == 2 and len(en) == 2):
@@ -136,6 +141,18 @@ def canonicalize(raw_walls, img_w, img_h, grid=None, order=None, sort=None):
                         "w": max(1, int(round(op.get("width", 0) * s)))})
         if order:
             cl, ops, cv = _order(cl, ops, cv)
-        walls.append({"cl": cl, "th": th, "cv": cv, "op": ops})
+        walls.append({"cl": cl, "th": th, "cv": cv, "op": ops, "_src": w.get("id", idx)})
 
-    return _sort(walls, grid) if sort else walls
+    if sort:
+        walls = _sort(walls, grid)
+
+    out_rooms = []
+    if rooms and config.ROOMS:
+        id_map = {w["_src"]: i + 1 for i, w in enumerate(walls)}   # source id -> final wall id
+        for r in (rooms or []):
+            refs = sorted({id_map[wid] for wid in (r.get("walls") or []) if wid in id_map})
+            if len(refs) >= 3:                                     # a real enclosed room
+                out_rooms.append({"t": r.get("label") or r.get("room_type") or "room", "w": refs})
+    for w in walls:
+        w.pop("_src", None)
+    return walls, out_rooms

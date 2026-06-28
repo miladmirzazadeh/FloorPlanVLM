@@ -113,6 +113,8 @@ SORT_WALLS = _b("SORT_WALLS", True)           # exterior clockwise, then interio
 ORDER_ENDPOINTS = _b("ORDER_ENDPOINTS", True) # cl always x1<=x2 (tie: y1<=y2)
 CURVATURE = _b("CURVATURE", True)             # emit signed 'cv' for curved walls (0=straight)
 CURVE_EPS = _f("CURVE_EPS", 0.02)             # |cv| below this is treated as straight (cv omitted)
+ROOMS = _b("ROOMS", True)                     # emit rooms as {type, border-wall-id set} (FloorplanVLM-style)
+                                              # — topology teaching; omitted for sources w/o room labels (archcad)
 NEG_SAMPLE_FRAC = _f("NEG_SAMPLE_FRAC", 0.0)  # 0=off (set 0.03-0.05 to add empty/garbage -> {"n":0,"walls":[]})
 AUGMENT = _b("AUGMENT", False)                # safe pixel-level aug (contrast/brightness/blur/scanlines); never geometric
 

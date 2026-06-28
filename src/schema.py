@@ -22,13 +22,14 @@ import json
 from . import config
 
 
-def encode(walls):
-    """Canonical walls (from normalize.canonicalize) -> minified target string."""
+def encode(walls, rooms=None):
+    """Canonical walls (+ optional rooms) from normalize.canonicalize -> minified target."""
     ab = config.ABBREVIATE
     k_cl, k_th, k_op = ("cl", "th", "op") if ab else ("centerline", "thickness", "openings")
     k_cv = "cv" if ab else "curvature"
     k_t, k_c, k_w = ("t", "c", "w") if ab else ("type", "center", "width")
     k_n = "n" if ab else "total_walls"
+    k_rt, k_rw = ("t", "w") if ab else ("type", "walls")     # room: type, border-wall ids
 
     objs = []
     for i, w in enumerate(walls, 1):
@@ -44,6 +45,8 @@ def encode(walls):
     if config.COUNT_ANCHOR:
         doc[k_n] = len(objs)
     doc["walls"] = objs
+    if config.ROOMS and rooms:
+        doc["rooms"] = [{k_rt: r["t"], k_rw: [int(i) for i in r["w"]]} for r in rooms]
     return json.dumps(doc, separators=(",", ":"))   # minified: no spaces/newlines
 
 
@@ -95,23 +98,30 @@ def schema_doc():
     """Exact schema text embedded in the (static) system prompt — kept in sync with encode()."""
     g = config.GRID
     if config.ABBREVIATE:
-        body = (
-            '{"n":N,"walls":[{"id":1,"cl":[x1,y1,x2,y2],"th":T,"cv":0,'
-            '"op":[{"t":"door"|"window","c":C,"w":W}]}]}'
-        )
+        walls = ('"walls":[{"id":1,"cl":[x1,y1,x2,y2],"th":T,"cv":0,'
+                 '"op":[{"t":"door"|"window","c":C,"w":W}]}]')
+        rooms = ',"rooms":[{"t":"room_type","w":[wall ids]}]' if config.ROOMS else ''
+        body = '{"n":N,' + walls + rooms + '}'
         keys = ("n=number of walls; id=1..N; cl=centerline [x1,y1,x2,y2]; th=thickness; "
                 "cv=curvature (0 for straight walls, a small signed value for curved walls; "
                 "omit when 0); op=openings (omit if none); t=type; "
                 "c=offset along cl from the first point; w=width.")
+        if config.ROOMS:
+            keys += (" rooms=each enclosed room; t=room type; w=the ids of the walls that "
+                     "border that room (its boundary).")
     else:
-        body = ('{"total_walls":N,"walls":[{"id":1,"centerline":[x1,y1,x2,y2],"thickness":T,'
-                '"curvature":0,"openings":[{"type":"door"|"window","center":C,"width":W}]}]}')
-        keys = "centerline=[x1,y1,x2,y2]; curvature 0 unless curved; openings omitted if none."
+        walls = ('"walls":[{"id":1,"centerline":[x1,y1,x2,y2],"thickness":T,"curvature":0,'
+                 '"openings":[{"type":"door"|"window","center":C,"width":W}]}]')
+        rooms = ',"rooms":[{"type":"room_type","walls":[wall ids]}]' if config.ROOMS else ''
+        body = '{"total_walls":N,' + walls + rooms + '}'
+        keys = ("centerline=[x1,y1,x2,y2]; curvature 0 unless curved; openings omitted if none."
+                + (" rooms: type + the ids of its border walls." if config.ROOMS else ""))
+    empty = '{"n":0,"walls":[]}' if config.ABBREVIATE else '{"total_walls":0,"walls":[]}'
     return (
         f"Output ONLY one line of minified JSON (no spaces, no newlines) with this schema:\n{body}\n"
         f"{keys}\n"
         f"All coordinates are integers in [0,{g}], normalized so the longer image edge = {g}.\n"
         f"Centerlines are ordered x1<=x2 (if vertical, y1<=y2). List the exterior boundary "
         f"walls first (clockwise), then interior walls top-left to bottom-right. "
-        f'If the image is not a readable floor plan, output {{"n":0,"walls":[]}}.'
+        f"If the image is not a readable floor plan, output {empty}."
     )
