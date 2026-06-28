@@ -195,10 +195,10 @@ def feedback(sc):
 
 # ── VLM clients ──────────────────────────────────────────────────────────────────
 
-def call_openai(model, img_b64, system, user):
+def call_openai(model, img_b64, system, user, effort="medium"):
     from openai import OpenAI
     client = OpenAI()
-    r = client.chat.completions.create(
+    kwargs = dict(
         model=model,
         messages=[
             {"role": "system", "content": system},
@@ -207,7 +207,11 @@ def call_openai(model, img_b64, system, user):
                 {"type": "image_url", "image_url": {"url": f"data:image/png;base64,{img_b64}"}},
             ]},
         ],
+        max_completion_tokens=16000,   # reasoning + output; avoids truncating the JSON
     )
+    if effort:
+        kwargs["reasoning_effort"] = effort   # GPT-5.x: minimal|low|medium|high
+    r = client.chat.completions.create(**kwargs)
     return r.choices[0].message.content
 
 
@@ -234,9 +238,9 @@ def pick_provider(arg):
     sys.exit("[vlm] set OPENAI_API_KEY or ANTHROPIC_API_KEY (or pass --provider).")
 
 
-def make_caller(provider, model):
+def make_caller(provider, model, effort="medium"):
     if provider == "openai":
-        return lambda b, s, u: call_openai(model or "gpt-5.5", b, s, u)
+        return lambda b, s, u: call_openai(model or "gpt-5.5", b, s, u, effort)
     if provider == "anthropic":
         return lambda b, s, u: call_anthropic(model or "claude-opus-4-8", b, s, u)
     sys.exit(f"[vlm] unknown provider {provider}")
@@ -276,12 +280,13 @@ def main():
     ap.add_argument("--out", default="vlm_results")
     ap.add_argument("--provider", choices=["openai", "anthropic"], default=None)
     ap.add_argument("--model", default=None)
+    ap.add_argument("--effort", default="medium", help="GPT-5.x reasoning effort: minimal|low|medium|high")
     ap.add_argument("--rounds", type=int, default=3, help="max refine iterations")
     ap.add_argument("--n", type=int, default=2, help="samples per round (best-of-N)")
     a = ap.parse_args()
 
     provider = pick_provider(a.provider)
-    caller = make_caller(provider, a.model)
+    caller = make_caller(provider, a.model, a.effort)
     os.makedirs(a.out, exist_ok=True)
     exts = (".png", ".jpg", ".jpeg", ".webp", ".bmp")
     imgs = sorted(p for p in glob.glob(os.path.join(a.images, "**", "*"), recursive=True)
