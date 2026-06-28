@@ -1,0 +1,11 @@
+__pycache__/
+*.pyc
+*.dxf
+# generated output (don't commit datasets to the code repo)
+dataset_valid/
+dataset*/
+configs_valid/
+valid_out/
+*.tar.gz
+*.zip
+.DS_Store

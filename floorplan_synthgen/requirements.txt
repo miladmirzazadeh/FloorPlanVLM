@@ -1,0 +1,7 @@
+# Synthetic Floor Plan Generator - dependencies
+ezdxf[draw]>=1.4      # DXF authoring + matplotlib drawing add-on (PNG render)
+numpy>=1.26           # geometry math
+Pillow>=10.0          # PNG post-processing (noise / anti-alias jitter)
+shapely>=2.0          # polygon boolean ops -> validator topology
+networkx>=3.0         # door-graph connectivity in validate_plan.py
+matplotlib>=3.8       # render backend used by ezdxf[draw]
