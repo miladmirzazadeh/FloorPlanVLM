@@ -159,10 +159,13 @@ def build_archcad_records(archcad_dir, max_samples=None, want_records=False):
         return [], []
     img_dir = os.path.join(archcad_dir, "rendered")
     os.makedirs(img_dir, exist_ok=True)
+    print(f"[archcad] {len(files)} json to scan (rendering plans, skipping non-plan sheets)...", flush=True)
     anns, kept, skipped = [], 0, 0
-    for f in files:
+    for i, f in enumerate(files):
         if max_samples and kept >= max_samples:
             break
+        if i and i % 2000 == 0:
+            print(f"[archcad]   {i}/{len(files)} scanned ({kept} kept, {skipped} skipped)", flush=True)
         try:
             ents = json.load(open(f))["entities"]
             img, walls = convert(ents)
