@@ -121,6 +121,12 @@ LORA_DROPOUT = _f("LORA_DROPOUT", 0.05)
 LORA_TARGETS = _s("LORA_TARGETS",
                   "q_proj,k_proj,v_proj,o_proj,gate_proj,up_proj,down_proj").split(",")
 
+# Precision: Qwen2.5-VL / Qwen3-VL are natively BF16-pretrained. Train AND infer in BF16
+# so weights are never cast to FP16 — FP16's narrower range + the train/infer cast is
+# exactly what nudges a [0,GRID] coordinate one cell off. A100 runs BF16 natively. Only
+# override if your GPU lacks BF16, and then prefer float32 over float16.
+TORCH_DTYPE = _s("TORCH_DTYPE", "bfloat16")
+
 # ── SFT ───────────────────────────────────────────────────────────────────────
 NUM_EPOCHS_SFT = _i("NUM_EPOCHS_SFT", 3)
 BATCH_SIZE_SFT = _i("BATCH_SIZE_SFT", 1)

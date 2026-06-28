@@ -24,6 +24,10 @@ try:                                            # prefer the exact class when pr
 except Exception:                               # fall back to the generic resolver
     from transformers import AutoModelForImageTextToText as VLM
 
+# native BF16 (see config.TORCH_DTYPE) — never silently fall to FP16
+_DTYPES = {"bfloat16": torch.bfloat16, "float16": torch.float16, "float32": torch.float32}
+DTYPE = _DTYPES.get(config.TORCH_DTYPE, torch.bfloat16)
+
 
 def _rows(path):
     return [json.loads(l) for l in open(path) if l.strip()]
@@ -71,7 +75,8 @@ def main():
 
     processor = AutoProcessor.from_pretrained(
         config.MODEL_ID, min_pixels=config.IMG_MIN_PIXELS, max_pixels=config.IMG_MAX_PIXELS)
-    model = VLM.from_pretrained(config.MODEL_ID, torch_dtype=torch.bfloat16)
+    model = VLM.from_pretrained(config.MODEL_ID, torch_dtype=DTYPE)
+    print(f"[sft] dtype={config.TORCH_DTYPE}")
     model.config.use_cache = False
     model.gradient_checkpointing_enable(gradient_checkpointing_kwargs={"use_reentrant": False})
     model = get_peft_model(model, LoraConfig(
@@ -86,7 +91,8 @@ def main():
         per_device_train_batch_size=config.BATCH_SIZE_SFT,
         gradient_accumulation_steps=config.GRAD_ACCUM_SFT,
         learning_rate=config.LR_SFT,
-        bf16=True,
+        bf16=(DTYPE == torch.bfloat16),
+        fp16=(DTYPE == torch.float16),
         logging_steps=10,
         save_steps=config.SAVE_STEPS_SFT,
         save_total_limit=2,
